@@ -1,0 +1,8 @@
+pyproject.toml
+src/splitly/__init__.py
+src/splitly_api.egg-info/PKG-INFO
+src/splitly_api.egg-info/SOURCES.txt
+src/splitly_api.egg-info/dependency_links.txt
+src/splitly_api.egg-info/requires.txt
+src/splitly_api.egg-info/top_level.txt
+tests/test_smoke.py

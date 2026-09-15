@@ -1,0 +1,18 @@
+# build artifacts — single location (SPEC §C37)
+dist/
+
+# deps
+node_modules/
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.ruff_cache/
+
+# env / secrets
+.env
+.env.*.local
+
+# editor / os
+.DS_Store
+Thumbs.db
