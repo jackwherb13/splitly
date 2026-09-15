@@ -10,6 +10,12 @@ __pycache__/
 .pytest_cache/
 .ruff_cache/
 
+# terraform — provider cache + state (SPEC §V14).
+# .terraform.lock.hcl is NOT ignored: it pins provider hashes for CI.
+.terraform/
+*.tfstate
+*.tfstate.*
+
 # env / secrets
 .env
 .env.*.local

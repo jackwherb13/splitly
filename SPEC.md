@@ -113,7 +113,7 @@ V10: ∀ admin route → session guard (⊥ forgotten)
 V11: ∀ entry → sum(per-person amounts) = entry total (⊥ rounding drift)
 V12: even split → remainder cents to payer, ⊥ dropped
 V13: ∀ body-text token pair → contrast ≥ 7:1 (WCAG AAA). test over token table
-V14: ⊥ build artifact tracked by git. ∀ path ∈ `git ls-files` → ∉ {dist/, *.egg-info/, node_modules/, __pycache__/, *.pyc}
+V14: ⊥ build artifact tracked by git. ∀ path ∈ `git ls-files` → ∉ {dist/, *.egg-info/, node_modules/, __pycache__/, *.pyc, .terraform/, *.tfstate*}. `.terraform.lock.hcl` = exception, ! committed — pins provider hashes ∀ CI
 ```
 
 ## §T
