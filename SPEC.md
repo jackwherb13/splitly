@@ -57,6 +57,7 @@ open `?` — ! resolve before §T reaches them:
 ?2 |mid-month move-in / move-out w/ outstanding balance
 ?3 |bill amount changes month to month
 ?4 |dark-mode palette for the app. champagne ground ⊥ survives inversion naively
+?5 |tf remote-state bucket ∈ chicken-and-egg w/ C42 — bucket must exist before tf can store state in it. resolve: local state → migrate, | separate bootstrap cfg
 ```
 
 ## §I
@@ -114,8 +115,9 @@ V14: ⊥ build artifact tracked by git. ∀ path ∈ `git ls-files` → ∉ {dis
 ```
 id |status|task|cites
 T1 |x|scaffold repo + 1-step build + CI gate (lint, pytest, build)|C5,C25,C27,C32,C34,C37,V14
-T1.5|.|terraform bootstrap — remote state, provider, DynamoDB entries table. ! before ANY console-created resource|C5,C28,C33
-T2 |.|ledger core — entry model, append-only store, derived balance|C6,V8,T1.5
+T1.5|.|terraform bootstrap — remote state + provider + OIDC role only. ⊥ table: key schema undecided until T2|C5,C33,C42,?5
+T2 |.|ledger core — entry model, append-only store, derived balance. ! emit key schema → T2.5|C6,V8,T1.5
+T2.5|.|terraform: DynamoDB entries table w/ schema from T2|C28,C42
 T3 |.|property tests: sum=0 & per-entry total|V1,V11
 T4 |x|split model resolved → C22,C23,C24|C22,V11
 T5 |.|Cognito invite-only magic link auth|C4,V10
