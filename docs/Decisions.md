@@ -13,6 +13,18 @@ Source of truth. Vault note `MyNotes/Projects/Splitly/Decisions.md` is an at-a-g
 - **Parked `?4`:** dark-mode palette for the app. A champagne ground does not survive naive inversion
 - Mockups: https://claude.ai/artifact/3SC2KuAKEPjCuNXPdBSoBU
 
+## Terraform bootstrap pulled forward as T1.5 — 2026-09-15
+- **New §C42:** every AWS resource is born in Terraform. No console-first-then-import
+- **New T1.5** (before T2): remote state, provider, and the DynamoDB entries table T2 needs
+- **Why:** §C33 said all infra is Terraform, but T20 sat at the *end* of the task list while T2 needs a table and T5 needs Cognito. As ordered, resources would be clicked into the console and imported months later — which contradicts §C33 and is a materially weaker interview answer than "every resource was code from the first one"
+- Side benefit: it front-loads the least familiar tool, which at 5-10 h/wk is where the hard part belongs
+- **T20 shrinks** to an IaC sweep confirming no console drift, rather than a build-it-all task
+
+## `?1` partial payments split — 2026-09-15
+- **The ledger half is already closed** by §C6 + §C22: a payment is an ordinary entry, and a partial payment is just an entry with a smaller number. The derived balance drops by exactly that much. No special handling, no new concept
+- **The real open question is the reminder, not the ledger:** does a partial payment reset the §C11 cap? Someone owing $300 pays $5 and buys three days of silence — gameable as currently written
+- Moved to **T19** (unpaid reminder job) where it belongs. **It no longer blocks T2**
+
 ## CLAUDE.md numbering fixed across all five copies — 2026-09-15
 - Every `CLAUDE.md` on the machine had **two sections numbered `## 4`** — "Goal-Driven Execution" and "Builds are one click" — so seven sections were numbered as six
 - Renumbered in all five: `~/.claude`, `Documents`, `Projects/Splitly`, `Projects/ATS_website`, `Projects/Rob-quote-tool`. Builds →§5, TDD →§6, final section →§7

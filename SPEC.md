@@ -48,11 +48,12 @@ C38|palette = Emerald Ink `#064E3B` + Champagne `#F8E7C9`. chosen 2026-09-15 —
 C39|derived tokens, ⊥ user-named, ? adjustable: surface `#FFFCF5` · ink `#1A2B24` · muted `#5F6F66` · rule `#E8D3AE` · on-accent `#F8E7C9`
 C40|⊥ green for +/− amounts. brand is green ∴ sign colour would read as brand. amounts in ink, sign by glyph + weight
 C41|∀ §T complete → update `docs/Decisions.md` (if a decision was made) + vault `Progress.md` + vault `Status.md` if phase moved. ⊥ optional, ⊥ "at session end"
+C42|∀ AWS resource ! born in Terraform. ⊥ console-first-then-import — weaker story & drift risk
 ```
 
 open `?` — ! resolve before §T reaches them:
 ```
-?1 |partial payments
+?1 |partial payment → resets reminder cap? $5 on a $300 debt buys 3 quiet days = gameable. ledger half already closed by C6+C22 (payment = ordinary entry). belongs to T19, ⊥ blocks T2
 ?2 |mid-month move-in / move-out w/ outstanding balance
 ?3 |bill amount changes month to month
 ?4 |dark-mode palette for the app. champagne ground ⊥ survives inversion naively
@@ -113,7 +114,8 @@ V14: ⊥ build artifact tracked by git. ∀ path ∈ `git ls-files` → ∉ {dis
 ```
 id |status|task|cites
 T1 |x|scaffold repo + 1-step build + CI gate (lint, pytest, build)|C5,C25,C27,C32,C34,C37,V14
-T2 |.|ledger core — entry model, append-only store, derived balance|C6,V8
+T1.5|.|terraform bootstrap — remote state, provider, DynamoDB entries table. ! before ANY console-created resource|C5,C28,C33
+T2 |.|ledger core — entry model, append-only store, derived balance|C6,V8,T1.5
 T3 |.|property tests: sum=0 & per-entry total|V1,V11
 T4 |x|split model resolved → C22,C23,C24|C22,V11
 T5 |.|Cognito invite-only magic link auth|C4,V10
@@ -130,8 +132,8 @@ T15|.|onboarding — Add to Home Screen walkthrough|C18
 T16|.|SHIP to house. wk8 clock starts|C1
 T17|.|recurring bill defs + scheduled post w/ idempotency key|C8,C30,V2
 T18|.|notify ∀ scheduled bill post|C10
-T19|.|unpaid reminder job — digest, cap 3, $10 floor, grace|C11,C12,C13,V4,V5
-T20|.|IaC — ∀ infra in Terraform|C5,C33
+T19|.|unpaid reminder job — digest, cap 3, $10 floor, grace. ! resolve ?1 here|C11,C12,C13,V4,V5,?1
+T20|.|IaC sweep — confirm ∀ infra is Terraform, ⊥ console drift. shrinks if T1.5 held|C5,C33
 T21|.|observability — alarms + delivery dashboard + budget|C5,C35
 ```
 
