@@ -49,6 +49,11 @@ C39|derived tokens, ⊥ user-named, ? adjustable: surface `#FFFCF5` · ink `#1A2
 C40|⊥ green for +/− amounts. brand is green ∴ sign colour would read as brand. amounts in ink, sign by glyph + weight
 C41|∀ §T complete → update `docs/Decisions.md` (if a decision was made) + vault `Progress.md` + vault `Status.md` if phase moved. ⊥ optional, ⊥ "at session end"
 C42|∀ AWS resource ! born in Terraform. ⊥ console-first-then-import — weaker story & drift risk
+C43|tf remote state = S3 backend, native locking `use_lockfile = true`. ⊥ DynamoDB lock table — deprecated, removal scheduled (§R10). `required_version >= 1.11`
+C44|state bucket born ∈ same `infra/` cfg: local backend → apply bucket → add `backend "s3"` → `terraform init -migrate-state`. ⊥ separate `bootstrap/` cfg — leaves committed state file ∈ git ∀ 1 resource
+C45|bootstrap infra (state bucket, OIDC provider, CI role) ∈ §C42. ⊥ exempt — circular dependency ≠ licence to click
+C46|region = `us-east-1`, single. ACM cert ∀ CloudFront ! ∈ us-east-1 regardless (§C26) ∴ 1 region ⊥ 2-region cert dance
+C47|local AWS auth = IAM user w/ only `sts:AssumeRole` → `AdminMFA` role, gated `aws:MultiFactorAuthPresent`. profile `splitly`, 4h sessions. ⊥ Identity Center while free plan alive — org creation burns Free Tier credits (§R11). ⊥ creds ∈ `.tf`
 ```
 
 open `?` — ! resolve before §T reaches them:
@@ -57,7 +62,6 @@ open `?` — ! resolve before §T reaches them:
 ?2 |mid-month move-in / move-out w/ outstanding balance
 ?3 |bill amount changes month to month
 ?4 |dark-mode palette for the app. champagne ground ⊥ survives inversion naively
-?5 |tf remote-state bucket ∈ chicken-and-egg w/ C42 — bucket must exist before tf can store state in it. resolve: local state → migrate, | separate bootstrap cfg
 ```
 
 ## §I
@@ -89,6 +93,8 @@ R6|⊥ push service guarantees device delivery. APNs/FCM/Expo return success lon
 R7|Expo err 0.02% vs direct APNs 0.00% — transport ≠ difference. native edge = ⊥ install/permission gate|https://www.courier.com/integrations/compare/apple-push-notification-vs-expo
 R8|A2P 10DLC Sole Proprietor brand = $4.50 one-time. toll-free number skips registration, free, ⊥ per-msg surcharge|https://support.twilio.com/hc/en-us/articles/1260803965530-What-pricing-and-fees-are-associated-with-the-A2P-10DLC-service
 R9|Do Not Disturb suppresses silently. 201 from push service says ⊥ about display|https://developer.apple.com/forums/thread/770749
+R10|tf 1.10 → S3 native locking experimental; 1.11 → GA + `dynamodb_table` deprecated, removal scheduled|https://developer.hashicorp.com/terraform/language/backend/s3
+R11|AWS free plan (post-2025): creating an Organization force-upgrades to paid → remaining Free Tier credits expire immediately. plan self-expires @ 6mo from account open | credit exhaustion|https://aws.amazon.com/free/terms
 ```
 
 ## §V
@@ -115,7 +121,7 @@ V14: ⊥ build artifact tracked by git. ∀ path ∈ `git ls-files` → ∉ {dis
 ```
 id |status|task|cites
 T1 |x|scaffold repo + 1-step build + CI gate (lint, pytest, build)|C5,C25,C27,C32,C34,C37,V14
-T1.5|.|terraform bootstrap — remote state + provider + OIDC role only. ⊥ table: key schema undecided until T2|C5,C33,C42,?5
+T1.5|.|terraform bootstrap — remote state + provider + OIDC role only. ⊥ table: key schema undecided until T2|C5,C33,C42,C43,C44,C45
 T2 |.|ledger core — entry model, append-only store, derived balance. ! emit key schema → T2.5|C6,V8,T1.5
 T2.5|.|terraform: DynamoDB entries table w/ schema from T2|C28,C42
 T3 |.|property tests: sum=0 & per-entry total|V1,V11

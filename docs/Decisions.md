@@ -2,6 +2,26 @@
 
 Source of truth. Vault note `MyNotes/Projects/Splitly/Decisions.md` is an at-a-glance index pointing here.
 
+## AWS auth: assume-role + MFA, NOT Identity Center — free-tier credits decided it — 2026-09-15
+- **Decided.** Local AWS auth is an IAM user holding *only* `sts:AssumeRole` into an `AdminMFA` role gated on `aws:MultiFactorAuthPresent`. Profile `splitly` in `~/.aws/config` with `role_arn` + `source_profile` + `mfa_serial`, 4-hour sessions. Terraform reads the profile via `AWS_PROFILE`; **no credentials in `.tf` files, ever**
+- **IAM Identity Center was the recommendation and was rejected on cost** — not its own cost (Identity Center and Organizations both carry no service fee) but a second-order one. Identity Center requires an *organization instance*; account instances do not support AWS account access or permission sets. On AWS's post-July-2025 account model, **creating an organization force-upgrades a free-plan account to paid and expires remaining Free Tier credits immediately**. Jackson had **$150 left**. A documented Dec-2025 case shows ~$140 going to $0.00 exactly this way
+- **The claim we did NOT bet on:** several secondary sources say upgrading to the paid plan *voluntarily first* preserves the credits to their original expiry. Plausible, **not in AWS's own docs**, and being wrong costs the full $150. Not worth the bet when a no-org path exists
+- **Why the fallback is nearly as good:** assume-role + MFA was the standard practice for years before Identity Center existed. The long-lived key on disk can do exactly one thing, and only with the phone in hand. From T1.5 onward CI authenticates via **OIDC**, so Jackson's personal credentials never enter the pipeline regardless
+- **Revisit trigger, not "someday":** the free plan expires on its own — 6 months from account opening, or when credits run out. **At that point upgrading is consequence-free and Identity Center should be revisited.** Until then, do not create an organization
+- **Account + human identity sit below the §C42 floor.** §C45 puts the state bucket, OIDC provider and CI role *inside* Terraform. The AWS account itself and the admin identity Terraform authenticates *as* cannot be — they are what Terraform authenticates with. Clicking those in the console is not a §C42 violation
+- Terraform **v1.16.2** installed, clears the `>= 1.11` floor §C43 requires
+- **Still open: the region.** `us-east-1` recommended — ACM certificates for CloudFront must live there regardless (§C26), so a single region avoids a two-region cert dance. Not yet confirmed by Jackson, and T1.5's `provider` block needs it
+
+## `?5` resolved — state bucket lives in the main config, local state then migrate — 2026-09-15
+- **Decided: option A.** One `infra/` config. Apply the S3 state bucket with the default local backend, then add the `backend "s3"` block and run `terraform init -migrate-state`. **Closes `?5`, unblocks T1.5**
+- **Verified as the documented path, not folklore** — this is HashiCorp's own migration flow: `init` detects local state and offers to copy it up. Both patterns are in wide use; the separate-config pattern is mostly a multi-account org habit, which does not apply to one personal AWS account
+- **Rejected: a separate `bootstrap/` config.** It buys clean separation at the price of a second Terraform config and a state file committed to git *permanently*, for exactly one resource
+- **Rejected: exempting bootstrap infrastructure from §C42.** Bootstrap infra is what must exist before Terraform can manage anything — here: the state bucket, the GitHub OIDC provider, and the IAM role CI assumes. A circular dependency is a reason to sequence carefully, not a licence to click. Now **§C45**
+- **Bootstrap does not mean "outside Terraform."** The OIDC role is created by Terraform too, just with *Jackson's local credentials* — CI cannot bootstrap its own access. That ordering constraint is the whole definition
+- **New §C43 — native state locking.** `use_lockfile = true`, `required_version >= 1.11`. **No DynamoDB lock table:** Terraform 1.10 shipped S3 native locking as experimental, 1.11 promoted it to GA and deprecated `dynamodb_table`, which is scheduled for removal. Sourced as **§R10**. This removes a resource T1.5 would otherwise have created
+- **New §C44** records the sequence itself so the build loop does not have to rediscover it
+- T1.5 scope unchanged and still Jackson's: state bucket + provider + OIDC provider/role. The entries table stays in T2.5
+
 ## Palette: Emerald Ink / Champagne — 2026-09-15
 - **Decided.** Emerald Ink `#064E3B` + Champagne `#F8E7C9`. Chosen from three candidates mocked as identical Splitly balance screens
 - **Why it won:** WCAG contrast on the accent/ground pair — Emerald/Champagne is **7.99:1**, the only candidate clearing AAA (7:1). Signal Blue/Porcelain was 5.15:1 and Ultra Violet/Soft Apricot 5.28:1, both AA-only
@@ -15,7 +35,7 @@ Source of truth. Vault note `MyNotes/Projects/Splitly/Decisions.md` is an at-a-g
 
 ## Terraform bootstrap pulled forward as T1.5 — 2026-09-15
 - **New §C42:** every AWS resource is born in Terraform. No console-first-then-import
-- **New T1.5** (before T2): remote state, provider, and the DynamoDB entries table T2 needs
+- **New T1.5** (before T2): remote state, provider, and OIDC role. *(Narrowed 2026-09-15 in `55bc9c8`: the DynamoDB entries table was split out to **T2.5** — its key schema is not decided until T2 designs the entry model, so T1.5 could not have created it)*
 - **Why:** §C33 said all infra is Terraform, but T20 sat at the *end* of the task list while T2 needs a table and T5 needs Cognito. As ordered, resources would be clicked into the console and imported months later — which contradicts §C33 and is a materially weaker interview answer than "every resource was code from the first one"
 - Side benefit: it front-loads the least familiar tool, which at 5-10 h/wk is where the hard part belongs
 - **T20 shrinks** to an IaC sweep confirming no console drift, rather than a build-it-all task
