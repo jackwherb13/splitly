@@ -15,7 +15,7 @@ C5 |cloud = AWS. ! IaC + CI/CD + observability + known monthly cost
 C6 |ledger append-only. entries immutable. balance derived by sum, ⊥ stored
 C7 |∀ balance → drills down to entries that produced it
 C8 |scheduled entries carry idempotency key (EventBridge at-least-once)
-C9 |notifications = 1 module `notifications.py` w/ `send()`. ⊥ Protocol|adapter|selection wiring until 2nd impl exists (repo `CLAUDE.md` §2)
+C9 |notifications = 1 module `notifications.py` w/ `send()`. ⊥ Protocol|adapter|selection wiring until 2nd impl exists (`~/.claude/CLAUDE.md` §2)
 C10|4 notify triggers: entry created | manual nudge | scheduled bill posts | unpaid reminder
 C11|unpaid reminder = per-person digest. ⊥ per-debt. every 3d, cap 3 → quiet until new entry|payment|manual nudge
 C12|reminder floor = $10. ⊥ nag below
@@ -42,11 +42,12 @@ C32|tests = pytest + Hypothesis. V1,V11 = properties ⊥ examples
 C33|IaC = Terraform. ⊥ CDK — HCL less pleasant, more transferable
 C34|CI = GitHub Actions. tests gate deploy
 C35|observability = CloudWatch alarms ∀ job failure + delivery-rate dashboard + AWS Budgets
-C36|TDD ! — test first, ∀ code. per repo `CLAUDE.md` §5
-C37|build = 1 step. artifacts → 1 location, gitignored. per repo `CLAUDE.md` §4
+C36|TDD ! — test first, ∀ code. per `~/.claude/CLAUDE.md` §6
+C37|build = 1 step. artifacts → 1 location, gitignored. per `~/.claude/CLAUDE.md` §5
 C38|palette = Emerald Ink `#064E3B` + Champagne `#F8E7C9`. chosen 2026-09-15 — only pair clearing AAA
 C39|derived tokens, ⊥ user-named, ? adjustable: surface `#FFFCF5` · ink `#1A2B24` · muted `#5F6F66` · rule `#E8D3AE` · on-accent `#F8E7C9`
 C40|⊥ green for +/− amounts. brand is green ∴ sign colour would read as brand. amounts in ink, sign by glyph + weight
+C41|∀ §T complete → update `docs/Decisions.md` (if a decision was made) + vault `Progress.md` + vault `Status.md` if phase moved. ⊥ optional, ⊥ "at session end"
 ```
 
 open `?` — ! resolve before §T reaches them:

@@ -13,7 +13,48 @@ Source of truth. Vault note `MyNotes/Projects/Splitly/Decisions.md` is an at-a-g
 - **Parked `?4`:** dark-mode palette for the app. A champagne ground does not survive naive inversion
 - Mockups: https://claude.ai/artifact/3SC2KuAKEPjCuNXPdBSoBU
 
-## Division of labor — Jackson writes anything an interviewer would ask about — 2026-09-15
+## CLAUDE.md numbering fixed across all five copies — 2026-09-15
+- Every `CLAUDE.md` on the machine had **two sections numbered `## 4`** — "Goal-Driven Execution" and "Builds are one click" — so seven sections were numbered as six
+- Renumbered in all five: `~/.claude`, `Documents`, `Projects/Splitly`, `Projects/ATS_website`, `Projects/Rob-quote-tool`. Builds →§5, TDD →§6, final section →§7
+- **Spec citations updated:** §C36 →§6 (TDD), §C37 →§5 (was citing by name to dodge the ambiguity, now a clean number). §C9 →§2, unchanged
+- **The copies have diverged**, which the renumber exposed: ATS carries its own §7 "Docs are part of the change, not a follow-up"; Rob-quote-tool has no §7 at all; Splitly/Documents/user-level carry the Obsidian mirror. They are **not** interchangeable copies
+- Jackson wants a `CLAUDE.md` kept in each project folder, so divergence is by design — but the shared §1-§6 now exist in five places and will drift again
+
+## `~/.claude/CLAUDE.md` stays exactly Jackson's six sections — 2026-09-15
+- **Reverses the merge recorded below.** The user-level file is restored to Jackson's original content verbatim: §1 Think Before Coding · §2 Simplicity First · §3 Surgical Changes · §4 Goal-Driven Execution · §4 Builds are one click *(duplicate number kept as written)* · §5 TDD · §6 Obsidian
+- Claude's three additions (pre-build brief, docs-current, infra/code split) were **removed from that file and moved to memory instead**, where they load every session without altering Jackson's ruleset
+- The full §6 body was kept even though only its heading was quoted back — it carries the live vault rules
+- **Spec citations corrected** for the restored numbering: §C36 → §5 (TDD). §C37 now cites the section **by name** — `"Builds are one click"` — rather than §4, because two sections share that number and a numeric citation is ambiguous
+- **Still true:** the user-level file applies to *every* session on this machine, including ATS and any existing repo — not only new projects
+
+## SUPERSEDED — `~/.claude/CLAUDE.md` is now the basis for all projects — 2026-09-15
+- The project `CLAUDE.md` was merged up to user level, which loads in every session regardless of directory. New projects inherit the whole ruleset without being set up
+- **Defect found and fixed in the merge:** the original had **two sections numbered `## 4`** — "Goal-Driven Execution" and "Builds are one click". `SPEC.md` §C37 cited "§4", which was ambiguous between them
+- Renumbered: builds §4→**§5**, TDD §5→**§6**. Added §7 (pre-build brief), §8 (docs current), §10 (infra vs code split)
+- **Spec citations repointed** from `repo CLAUDE.md` to `~/.claude/CLAUDE.md` with corrected numbers: §C9 →§2, §C36 →§6, §C37 →§5
+- `Projects/Splitly/CLAUDE.md` still exists and is now redundant with the user-level copy. **Left in place rather than deleted** — drift risk is real, so it should either be removed or trimmed to Splitly-only overrides
+
+## Docs are updated as work happens, not at session end — 2026-09-15
+- **`SPEC.md` §C41 added.** Every completed §T row updates `docs/Decisions.md` (if a decision was made), vault `Progress.md`, and vault `Status.md` if the phase moved
+- **Gap it closes:** the vault CLAUDE.md already said to update project notes as work happens, but **nothing anywhere covered the repo's own `docs/`** — the source of truth. That was held in Claude's head, which is exactly how the ATS notes went stale
+- Put in `SPEC.md` rather than only `CLAUDE.md` so the build loop reads it every time
+- **Made global:** created `C:/Users/jwesl/.claude/CLAUDE.md` (user-level, loads in every session regardless of directory) carrying the same rule, so future projects inherit it without being told
+
+## Every build task gets a pre-build brief — 2026-09-15
+- Before starting any §T row, Claude states up front: **Will change** (files + what each does) · **Won't change** (adjacent things left alone) · **You'll see** (exact command + what good output looks like) · **Not yet visible** (stated honestly)
+- **Why:** `npm run verify` exiting 0 is the oracle, not confirmation Jackson can see. He wants to check the work himself rather than take "tests pass" on faith
+- Backend tasks (T2-T5) confirm via command output, and that gets said plainly rather than dressed up as visual. From T6 the PWA shell exists and confirmation becomes literal — run the dev server, look at it
+- Where an invariant is the point of the task, showing it fail first and then pass is the strongest confirmation available (as B1/§V14 did in T1)
+
+## Division of labor REVERSED — Jackson owns GitHub + AWS, Claude owns the code — 2026-09-15
+- **Jackson writes:** everything GitHub (Actions workflows, repo/PR flow, OIDC) and everything AWS (Cognito, DynamoDB, Lambda config, S3/CloudFront, EventBridge, CloudWatch alarms, Budgets) plus all Terraform/IaC
+- **Claude writes:** the application code — React components and CSS, the PWA shell, Python ledger core, Lambda handler bodies, `notifications.py`, and the pytest/Hypothesis property tests
+- Stated as a standing preference for **future work too**, not just Splitly: "any of these github or aws features I want to do all myself and you handle most of the developing"
+- **Supersedes the entry below**, which had Jackson writing the ledger and property tests and Claude writing UI chrome
+- **The tradeoff, named once:** the old split's rule was "Jackson writes whatever an interviewer would ask him to explain," and it named the ledger as exactly that. This split moves the ledger to Claude. That is **correct for a cloud-engineer target** — there the pipeline, IAM and Terraform are the interview material — and **weaker for a straight SWE target**, where the ledger is what gets asked about. Revisit if the role target sharpens
+- Review style unchanged: Claude names the bug, does not hand over the fix
+
+## SUPERSEDED — Division of labor — Jackson writes anything an interviewer would ask about — 2026-09-15
 - **Jackson writes:** ledger core (entries, derived balances, split calculators), all Lambda handlers, the property tests (§V1, §V11), Terraform
 - **Claude writes:** React components and UI chrome, service-worker boilerplate, CSS/layout/forms, GitHub Actions YAML
 - **The line:** Jackson writes anything an interviewer would ask him to explain. "How do you guarantee balances never drift?" and "what happens when your scheduled job fires twice?" are the questions this project exists to let him answer — if Claude writes those, the résumé bullet becomes something he has to defend live without having written it

@@ -60,15 +60,15 @@ Strong success criteria let you loop independently. Weak criteria ("make it work
 
 **These guidelines are working if:** fewer unnecessary changes in diffs, fewer rewrites due to overcomplication, and clarifying questions come before implementation rather than after mistakes.
 
-## 4. Builds are one click
+## 5. Builds are one click
 
 All builds should be one step builds
 Build artifacts should be cleaned from a singular location
 .gitignore files should keep the workspace from being polluted.
 
-## 5. All code should be Test-Driven-Development (TDD)
+## 6. All code should be Test-Driven-Development (TDD)
 
-## 6. Track projects and learning in Obsidian
+## 7. Track projects and learning in Obsidian
 
 Vault: `C:\Users\jwesl\Documents\Obsidian\Jackson-Windows` — full rules live in that vault's own `CLAUDE.md`/`INDEX.md`, which only auto-load when a session's cwd is inside the vault. This section is a mirror so the rules apply even in sessions elsewhere (e.g. working in a code repo). If the vault's `CLAUDE.md` is available in context, it's the source of truth over this mirror.
 
