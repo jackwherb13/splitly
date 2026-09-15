@@ -2,6 +2,13 @@
 
 Source of truth. Vault note `MyNotes/Projects/Splitly/Decisions.md` is an at-a-glance index pointing here.
 
+## §V14 extended to Terraform artifacts — before `infra/` exists — 2026-09-15
+- **`.terraform/` and `*.tfstate*` added to the §V14 marker set**, to `test_repo_hygiene.py`, and to `.gitignore`. Commit `523ae6f`
+- **Done as prep for T1.5, deliberately before the directory exists.** B1 was found *after* `*.egg-info/` was already committed. The provider cache runs to hundreds of MB and state files can contain secrets — both are B1's exact shape
+- **Proven red before green**, same as B1: staged a fake `infra/.terraform/dummy.bin` and `infra/terraform.tfstate`, confirmed the existing test **passed blind**, then added the markers and watched it fail naming both. A test that only ever passes proves nothing
+- **`.terraform.lock.hcl` is explicitly NOT a marker and NOT ignored** — it is committed on purpose, because it pins provider hashes so CI resolves exactly what was resolved locally. Noted in the test docstring so nobody "tidies" it into the ignore list later
+- Not a §T row, so no status flipped
+
 ## AWS auth: assume-role + MFA, NOT Identity Center — free-tier credits decided it — 2026-09-15
 - **Decided.** Local AWS auth is an IAM user holding *only* `sts:AssumeRole` into an `AdminMFA` role gated on `aws:MultiFactorAuthPresent`. Profile `splitly` in `~/.aws/config` with `role_arn` + `source_profile` + `mfa_serial`, 4-hour sessions. Terraform reads the profile via `AWS_PROFILE`; **no credentials in `.tf` files, ever**
 - **IAM Identity Center was the recommendation and was rejected on cost** — not its own cost (Identity Center and Organizations both carry no service fee) but a second-order one. Identity Center requires an *organization instance*; account instances do not support AWS account access or permission sets. On AWS's post-July-2025 account model, **creating an organization force-upgrades a free-plan account to paid and expires remaining Free Tier credits immediately**. Jackson had **$150 left**. A documented Dec-2025 case shows ~$140 going to $0.00 exactly this way
