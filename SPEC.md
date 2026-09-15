@@ -104,13 +104,14 @@ V10: ∀ admin route → session guard (⊥ forgotten)
 V11: ∀ entry → sum(per-person amounts) = entry total (⊥ rounding drift)
 V12: even split → remainder cents to payer, ⊥ dropped
 V13: ∀ body-text token pair → contrast ≥ 7:1 (WCAG AAA). test over token table
+V14: ⊥ build artifact tracked by git. ∀ path ∈ `git ls-files` → ∉ {dist/, *.egg-info/, node_modules/, __pycache__/, *.pyc}
 ```
 
 ## §T
 
 ```
 id |status|task|cites
-T1 |x|scaffold repo + 1-step build + CI gate (lint, pytest, build)|C5,C25,C27,C32,C34,C37
+T1 |x|scaffold repo + 1-step build + CI gate (lint, pytest, build)|C5,C25,C27,C32,C34,C37,V14
 T2 |.|ledger core — entry model, append-only store, derived balance|C6,V8
 T3 |.|property tests: sum=0 & per-entry total|V1,V11
 T4 |x|split model resolved → C22,C23,C24|C22,V11
@@ -139,4 +140,5 @@ T16 deliberately mid-list: ship before reminders exist. wk8 clock ! start early,
 
 ```
 id|date|cause|fix
+B1|2026-09-15|`.gitignore` ⊥ `*.egg-info/` → editable pip install artifact swept in by `git add -A`, tracked outside dist/ ∴ §C37 violated. ⊥ check existed|V14
 ```
