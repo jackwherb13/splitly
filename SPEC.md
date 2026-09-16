@@ -113,7 +113,10 @@ V10: ∀ admin route → session guard (⊥ forgotten)
 V11: ∀ entry → sum(per-person amounts) = entry total (⊥ rounding drift)
 V12: even split → remainder cents to payer, ⊥ dropped
 V13: ∀ body-text token pair → contrast ≥ 7:1 (WCAG AAA). test over token table
-V14: ⊥ build artifact tracked by git. ∀ path ∈ `git ls-files` → ∉ {dist/, *.egg-info/, node_modules/, __pycache__/, *.pyc, .terraform/, *.tfstate*}. `.terraform.lock.hcl` = exception, ! committed — pins provider hashes ∀ CI
+V14: ⊥ build artifact tracked by git. 2 clauses, ! both — name ⊽ content (B2)
+     a) ∀ path ∈ `git ls-files` → ∉ {dist/, *.egg-info/, node_modules/, __pycache__/, *.pyc, .terraform/, *.tfstate*}
+     b) ∀ tracked file parsing as JSON obj → ⊥ {terraform_version, lineage} ⊆ keys. tf state names itself ∴ name-match alone ⊥ sufficient
+     `.terraform.lock.hcl` = exception, ! committed — pins provider hashes ∀ CI
 ```
 
 ## §T
@@ -121,7 +124,7 @@ V14: ⊥ build artifact tracked by git. ∀ path ∈ `git ls-files` → ∉ {dis
 ```
 id |status|task|cites
 T1 |x|scaffold repo + 1-step build + CI gate (lint, pytest, build)|C5,C25,C27,C32,C34,C37,V14
-T1.5|.|terraform bootstrap — remote state + provider + OIDC role only. ⊥ table: key schema undecided until T2|C5,C33,C42,C43,C44,C45
+T1.5|x|terraform bootstrap — remote state + provider + OIDC role only. ⊥ table: key schema undecided until T2|C5,C33,C42,C43,C44,C45
 T2 |.|ledger core — entry model, append-only store, derived balance. ! emit key schema → T2.5|C6,V8,T1.5
 T2.5|.|terraform: DynamoDB entries table w/ schema from T2|C28,C42
 T3 |.|property tests: sum=0 & per-entry total|V1,V11
@@ -152,4 +155,5 @@ T16 deliberately mid-list: ship before reminders exist. wk8 clock ! start early,
 ```
 id|date|cause|fix
 B1|2026-09-15|`.gitignore` ⊥ `*.egg-info/` → editable pip install artifact swept in by `git add -A`, tracked outside dist/ ∴ §C37 violated. ⊥ check existed|V14
+B2|2026-09-16|tf state dumped to `infra/state.json` → tracked. §V14 markers match *filename*, `state.json` ∉ `*.tfstate*` ∴ check existed + passed blind. B1 shape ×2: B1 = ⊥ check, B2 = check tested wrong property|V14b
 ```

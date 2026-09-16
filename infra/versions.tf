@@ -8,6 +8,7 @@ terraform {
     }
   }
 
+  //record of what terraform manages in aws
   backend "s3" {
     bucket       = "splitly-tfstate-725423737107"
     key          = "splitly/terraform.tfstate"

@@ -15,6 +15,9 @@ __pycache__/
 .terraform/
 *.tfstate
 *.tfstate.*
+# B2: real state that dodged the patterns above by being named .json.
+# The content check in test_repo_hygiene.py is the actual guard.
+infra/state.json
 
 # env / secrets
 .env
