@@ -2,6 +2,17 @@
 
 Source of truth. Vault note `MyNotes/Projects/Splitly/Decisions.md` is an at-a-glance index pointing here.
 
+## `?2` closed — move-in / move-out with an outstanding balance — 2026-09-16
+- **Decided.** §C48, §C49, §C50 added; `?2` removed from the open list. T2 unblocked
+- **Moving out changes exactly one thing: the member's `active` flag, which excludes them from *new* splits.** Everything else was already free under §C6 — entries are immutable, so the debt persists by construction. Jackson's instinct ("keep them there until they settle") turned out not to be a feature to build but the default behaviour of an append-only ledger
+- **"Settled" is not stored.** It is `balance == 0`, derived. Same argument as §C6: a stored flag can disagree with the ledger, a derived one cannot
+- **No proration (§C49).** A mid-cycle month uses the manual split mode §C23 already provides — the house agrees the number, the app records it. Day-based proration was costed and rejected: it needs move-in/out dates, billing-period math, and a rounding rule interacting with §C24, to serve a calculator used maybe twice in the project's life (§C20: four users, known personally)
+- **Write-off is an offsetting entry, not a deletion (§C50).** Jackson asked for the ability to "remove" a debt that had persisted too long. §C6/§V8 forbid deletion, but the outcome he wanted — balance goes to zero — is reachable by posting an ordinary entry, and is strictly better: the ledger records that $X was *forgiven* rather than leaving a hole where the history was. Reminders then stop **for free** via the §C12/§V5 $10 floor
+- **Allocation of a write-off uses manual mode, not an even split.** An even split would recover one person's loss from someone who never fronted the money — if Jackson paid most of what the departing housemate owed, evenly absorbing it makes Alice reimburse Jackson for a debt she had no part in. Same philosophy as §C49: the humans agree the number
+- **Admin-gating needed no new machinery** — §V10 already requires a session guard on every admin route
+- **No new §V invariant was added, deliberately.** §V1 (sum = 0), §V5, §V8 and §V10 already cover the behaviour. Needing no new invariant is evidence the design fits the existing model rather than fighting it
+- **New §T8.5** (member admin — active toggle + write-off) exists because a constraint with no task is drift by construction. Flagged to Jackson as foldable into T7 if he prefers
+
 ## T1.5 COMPLETE — GitHub OIDC provider + CI role applied — 2026-09-16
 - **Applied and verified.** `terraform state list` returns all seven resources: the four state-bucket resources plus `aws_iam_openid_connect_provider.github`, `aws_iam_role.ci`, `aws_iam_role_policy_attachment.ci`. Verified from a second shell, so it is state, not terminal scrollback
 - **No thumbprint.** `thumbprint_list` is optional on the provider resource, and AWS ignores it for GitHub — it validates against its own trusted-CA library. The hardcoded `6938fd4d...` fingerprint in most tutorials is obsolete and used to break pipelines when it rotated. Verified against the provider docs before writing, not assumed

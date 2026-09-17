@@ -54,12 +54,14 @@ C44|state bucket born ∈ same `infra/` cfg: local backend → apply bucket → 
 C45|bootstrap infra (state bucket, OIDC provider, CI role) ∈ §C42. ⊥ exempt — circular dependency ≠ licence to click
 C46|region = `us-east-1`, single. ACM cert ∀ CloudFront ! ∈ us-east-1 regardless (§C26) ∴ 1 region ⊥ 2-region cert dance
 C47|local AWS auth = IAM user w/ only `sts:AssumeRole` → `AdminMFA` role, gated `aws:MultiFactorAuthPresent`. profile `splitly`, 4h sessions. ⊥ Identity Center while free plan alive — org creation burns Free Tier credits (§R11). ⊥ creds ∈ `.tf`
+C48|member carries `active` flag. inactive → ∉ new splits. entries + balance untouched ∴ debt persists. "settled" = derived (balance == 0), ⊥ stored — same argument as C6
+C49|⊥ proration ∀ mid-cycle move-in|out. partial month → manual split mode (C23). house agrees number, app records it. ⊥ move-in|out dates, ⊥ day-count math
+C50|write-off = ordinary entry, admin-only (V10), tagged ⊽ payment ∴ drilldown shows forgiven, ⊥ paid. allocation via manual mode (C23) — even split would recover 1 person's loss from another. ⊥ deletion (C6,V8). balance → 0 ∴ reminders stop via V5
 ```
 
 open `?` — ! resolve before §T reaches them:
 ```
 ?1 |partial payment → resets reminder cap? $5 on a $300 debt buys 3 quiet days = gameable. ledger half already closed by C6+C22 (payment = ordinary entry). belongs to T19, ⊥ blocks T2
-?2 |mid-month move-in / move-out w/ outstanding balance
 ?3 |bill amount changes month to month
 ?4 |dark-mode palette for the app. champagne ground ⊥ survives inversion naively
 ```
@@ -125,7 +127,7 @@ V14: ⊥ build artifact tracked by git. 2 clauses, ! both — name ⊽ content (
 id |status|task|cites
 T1 |x|scaffold repo + 1-step build + CI gate (lint, pytest, build)|C5,C25,C27,C32,C34,C37,V14
 T1.5|x|terraform bootstrap — remote state + provider + OIDC role only. ⊥ table: key schema undecided until T2|C5,C33,C42,C43,C44,C45
-T2 |.|ledger core — entry model, append-only store, derived balance. ! emit key schema → T2.5|C6,V8,T1.5
+T2 |.|ledger core — entry model + member{id,name,active}, append-only store, derived balance. ! emit key schema → T2.5|C6,C48,V8,T1.5
 T2.5|.|terraform: DynamoDB entries table w/ schema from T2|C28,C42
 T3 |.|property tests: sum=0 & per-entry total|V1,V11
 T4 |x|split model resolved → C22,C23,C24|C22,V11
@@ -133,6 +135,7 @@ T5 |.|Cognito invite-only magic link auth|C4,V10
 T6 |.|PWA shell — manifest, service worker, tokens, installable|C3,C25,C26,C38,C39,V13
 T7 |.|entry CRUD ui — 3 split input modes|C23,V11,V12
 T8 |.|balance view + drilldown|C7,V3
+T8.5|.|member admin — active toggle + write-off action. admin-only|C48,C50,V10
 T9 |.|`notifications.py` — `send()` via `pywebpush`|C9,C31
 T10|.|push subscribe flow, button-gated after value|C17,V6
 T11|.|notify ∀ entry create, via stream|C10,C29
