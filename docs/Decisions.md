@@ -2,6 +2,30 @@
 
 Source of truth. Vault note `MyNotes/Projects/Splitly/Decisions.md` is an at-a-glance index pointing here.
 
+## T2 ledger core — entry shape and the key schema T2.5 needs — 2026-09-16
+- **The entry shape is the decision everything downstream reads:** `total` (int cents) + `payer` + `shares{member_id: cents}`, where shares must sum to total. Net effect is payer `+total`, each member `−their share`
+- **§V1 needs no enforcement — it falls out of the shape.** Every entry nets to zero, so the ledger does too. An invariant that is a consequence of the data model cannot be violated by a future caller forgetting to check it
+- **`total` is stored, not derived from `shares`.** Deriving it would make §V11 vacuous — there would be nothing left to disagree with. The point of §V11 is that a UI calculator splitting $100 three ways must still produce shares adding to $100, and that is only checkable if both numbers exist
+- **A payment and a write-off are ordinary entries, not special cases.** Dan paying $50 is `total=50, payer=Dan, shares={Jackson:50}`; a §C50 write-off is the same shape with a different `kind`. This is §C6 paying for itself — no new concepts were needed for either
+- **Money is integer cents everywhere, never float.** §V11 and §V12 are unprovable against binary floating point
+- **`kind` is deliberately unvalidated.** No invariant constrains it yet, and validating it would be untested code; T8.5 introduces the write-off path that first cares
+- **Frozen dataclass was not enough for §V8** — it blocks rebinding the attribute but still hands out a mutable `shares` dict, so the mapping is copied and wrapped in `MappingProxyType`. `test_entry_shares_cannot_be_mutated_through_the_mapping` covers the back door
+- **§V8 on the store is enforced by absence:** there is no update and no delete method, and `test_store_exposes_no_update_or_delete` asserts none appears later
+
+### Key schema — this is T2.5's input
+```
+pk = HOUSE#<house_id>    sk = ENTRY#<entry_id>
+pk = HOUSE#<house_id>    sk = MEMBER#<member_id>
+```
+- One partition per house: listing a ledger is a single query, and entries and members are separated only by the sort-key prefix
+- **`created_at` is deliberately NOT in the key.** A scheduled job firing twice (§C8 — EventBridge is at-least-once) derives its `entry_id` from its idempotency key, and the conditional write `attribute_not_exists(pk) AND attribute_not_exists(sk)` makes the retry a no-op — which is §V2, obtained for free at T17. **A timestamp in the key would give the retry a different key and post the bill twice.** Ordering is done in Python instead; at four users that is free (§C20)
+- Table is billed `PAY_PER_REQUEST` in tests; T2.5 chooses the real billing mode
+
+### Testing
+- **`moto` added as a dev dependency** so store tests run offline in CI — the alternative was deferring `store.py` until T2.5 built a real table, which would have left the §T2 row half-done
+- Store tests set dummy AWS credentials as a safety belt: if a mock ever fails to engage, the call fails on bad credentials instead of reaching a live account
+- **Decimal round-trip is tested explicitly.** DynamoDB returns every number as `Decimal`; without conversion, cents come back as `Decimal` and quietly poison every downstream sum
+
 ## `?2` closed — move-in / move-out with an outstanding balance — 2026-09-16
 - **Decided.** §C48, §C49, §C50 added; `?2` removed from the open list. T2 unblocked
 - **Moving out changes exactly one thing: the member's `active` flag, which excludes them from *new* splits.** Everything else was already free under §C6 — entries are immutable, so the debt persists by construction. Jackson's instinct ("keep them there until they settle") turned out not to be a feature to build but the default behaviour of an append-only ledger
