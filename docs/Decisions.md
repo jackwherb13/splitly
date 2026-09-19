@@ -2,6 +2,14 @@
 
 Source of truth. Vault note `MyNotes/Projects/Splitly/Decisions.md` is an at-a-glance index pointing here.
 
+## T3 property tests over §V1 and §V11 — 2026-09-18
+
+- **Red-before-green had nothing to drive.** T3 adds tests over invariants T2 already implements, so there was no production code to write. The honest substitute is **mutation testing**: each property was run against a deliberately broken `ledger.py` and had to fail. Dropping the §V11 check killed exactly `test_v11_rejects_any_total_disagreeing_with_shares`; crediting the payer one cent too much in `balances()` killed exactly the two §V1 properties. Both mutations reverted via `git checkout`. This is the §B2 lesson applied — a check that exists and passes blind is worse than no check
+- **One drafted property was deleted for being tautological.** "Every entry in any generated ledger has shares summing to its total" tests the Hypothesis strategy, not `ledger.py`, because the strategy builds `total` as `sum(shares)`. It would have passed against *any* implementation. Exactly §B2's shape, caught before it landed
+- **Added one property beyond the two cited:** `test_balances_are_order_independent`. §C6 says balances are derived by summing and never stored; a ledger that sums to zero in one order but not another would satisfy §V1's letter and break its meaning. One line, and it guards the claim §C6 actually makes
+- **Fixed four-person roster instead of generated member names** (§C20). Members then genuinely collide across entries — with freely generated names almost every entry would touch a disjoint set of people, and the ledger-wide sum would be a much weaker test. It also keeps shrunk counterexamples readable
+- **The example tests in `test_ledger.py` stay.** §C32 says §V1 and §V11 must be *properties*, not that examples are forbidden. The examples document what an entry means; the properties prove the invariant holds
+
 ## T2 ledger core — entry shape and the key schema T2.5 needs — 2026-09-16
 - **The entry shape is the decision everything downstream reads:** `total` (int cents) + `payer` + `shares{member_id: cents}`, where shares must sum to total. Net effect is payer `+total`, each member `−their share`
 - **§V1 needs no enforcement — it falls out of the shape.** Every entry nets to zero, so the ledger does too. An invariant that is a consequence of the data model cannot be violated by a future caller forgetting to check it
