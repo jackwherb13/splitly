@@ -2,6 +2,13 @@
 
 Source of truth. Vault note `MyNotes/Projects/Splitly/Decisions.md` is an at-a-glance index pointing here.
 
+## Division of labor narrowed again — Claude writes Terraform, Jackson runs it — 2026-09-20
+
+- **Claude implements everything, including Terraform/HCL.** Jackson's scope narrows to three things: **AWS in the terminal** (`terraform plan/apply`, `aws` CLI), **the AWS console**, and **the CI/CD pipeline**
+- **The line moved from *authoring* to *operating*.** The 09-15 reversal gave Jackson all IaC on the theory that a cloud-engineer interview asks about Terraform. What T1.5 and T2.5 showed is that the interview-relevant part is not typing `attribute { name = "pk" }` — it is holding the credential, reading a plan diff, deciding whether `1 to add, 0 to change` is what you meant, and owning the apply. Authoring HCL was costing walkthrough turns and buying little
+- **What this does not change:** §C42 still stands — every AWS resource is born in Terraform, and Jackson still runs every `apply`. Nothing gets clicked into existence. The state, the credential and the blast radius stay his
+- **Supersedes the 09-15 reversal** (below) only on the IaC clause. GitHub Actions and the pipeline remain Jackson's
+
 ## T3 property tests over §V1 and §V11 — 2026-09-18
 
 - **Red-before-green had nothing to drive.** T3 adds tests over invariants T2 already implements, so there was no production code to write. The honest substitute is **mutation testing**: each property was run against a deliberately broken `ledger.py` and had to fail. Dropping the §V11 check killed exactly `test_v11_rejects_any_total_disagreeing_with_shares`; crediting the payer one cent too much in `balances()` killed exactly the two §V1 properties. Both mutations reverted via `git checkout`. This is the §B2 lesson applied — a check that exists and passes blind is worse than no check
@@ -163,7 +170,7 @@ pk = HOUSE#<house_id>    sk = MEMBER#<member_id>
 - Backend tasks (T2-T5) confirm via command output, and that gets said plainly rather than dressed up as visual. From T6 the PWA shell exists and confirmation becomes literal — run the dev server, look at it
 - Where an invariant is the point of the task, showing it fail first and then pass is the strongest confirmation available (as B1/§V14 did in T1)
 
-## Division of labor REVERSED — Jackson owns GitHub + AWS, Claude owns the code — 2026-09-15
+## PARTLY SUPERSEDED (2026-09-20, IaC clause) — Division of labor REVERSED — Jackson owns GitHub + AWS, Claude owns the code — 2026-09-15
 - **Jackson writes:** everything GitHub (Actions workflows, repo/PR flow, OIDC) and everything AWS (Cognito, DynamoDB, Lambda config, S3/CloudFront, EventBridge, CloudWatch alarms, Budgets) plus all Terraform/IaC
 - **Claude writes:** the application code — React components and CSS, the PWA shell, Python ledger core, Lambda handler bodies, `notifications.py`, and the pytest/Hypothesis property tests
 - Stated as a standing preference for **future work too**, not just Splitly: "any of these github or aws features I want to do all myself and you handle most of the developing"

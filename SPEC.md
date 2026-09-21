@@ -128,7 +128,7 @@ id |status|task|cites
 T1 |x|scaffold repo + 1-step build + CI gate (lint, pytest, build)|C5,C25,C27,C32,C34,C37,V14
 T1.5|x|terraform bootstrap — remote state + provider + OIDC role only. ⊥ table: key schema undecided until T2|C5,C33,C42,C43,C44,C45
 T2 |x|ledger core — entry model + member{id,name,active}, append-only store, derived balance. ! emit key schema → T2.5|C6,C48,V8,T1.5
-T2.5|.|terraform: DynamoDB entries table w/ schema from T2|C28,C42
+T2.5|~|terraform: DynamoDB entries table w/ schema from T2|C28,C42
 T3 |x|property tests: sum=0 & per-entry total|V1,V11
 T4 |x|split model resolved → C22,C23,C24|C22,V11
 T5 |.|Cognito invite-only magic link auth|C4,V10
