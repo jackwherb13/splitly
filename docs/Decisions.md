@@ -2,12 +2,21 @@
 
 Source of truth. Vault note `MyNotes/Projects/Splitly/Decisions.md` is an at-a-glance index pointing here.
 
-## Division of labor narrowed again — Claude writes Terraform, Jackson runs it — 2026-09-20
+## T2.5 DynamoDB table — 2026-09-20
 
-- **Claude implements everything, including Terraform/HCL.** Jackson's scope narrows to three things: **AWS in the terminal** (`terraform plan/apply`, `aws` CLI), **the AWS console**, and **the CI/CD pipeline**
-- **The line moved from *authoring* to *operating*.** The 09-15 reversal gave Jackson all IaC on the theory that a cloud-engineer interview asks about Terraform. What T1.5 and T2.5 showed is that the interview-relevant part is not typing `attribute { name = "pk" }` — it is holding the credential, reading a plan diff, deciding whether `1 to add, 0 to change` is what you meant, and owning the apply. Authoring HCL was costing walkthrough turns and buying little
-- **What this does not change:** §C42 still stands — every AWS resource is born in Terraform, and Jackson still runs every `apply`. Nothing gets clicked into existence. The state, the credential and the blast radius stay his
-- **Supersedes the 09-15 reversal** (below) only on the IaC clause. GitHub Actions and the pipeline remain Jackson's
+- **Table is named `splitly`, not `splitly-entries`.** §T2.5's row says "entries table", but T2 put entries *and* members in the same partition (`HOUSE#<id>` with `ENTRY#`/`MEMBER#` sort-key prefixes), and subscriptions, bill defs and houses will land in it too. Single-table design — naming it `entries` would be a lie by T13
+- **Streams deliberately left off.** §C29 wants DynamoDB Streams → Lambda, but T11 is the row that cites §C29. `stream_enabled` flips later as an **in-place update, not a table replacement**, so nothing is bought by enabling a feature no code calls
+- **`prevent_destroy = true`**, matching the state bucket. §C6 promises entries are immutable; a stray `terraform destroy` would make that promise worthless
+- **`PAY_PER_REQUEST`** — four users (§C20). Provisioned capacity means picking numbers with nothing to justify them and paying for idle
+- **No `output` for the table name.** Nothing reads it until the API lands; an output no consumer uses is speculation
+- **No SSE block** — DynamoDB encrypts at rest by default with an AWS-owned key
+- Verified against the live account, not just the plan: `describe-table` returns `pk` HASH / `sk` RANGE, both `S`, `PAY_PER_REQUEST`, `ACTIVE`. Apply was `1 added, 0 changed, 0 destroyed`, confirming no drift against the bucket, OIDC provider or CI role
+
+## Division of labor — narrowed for one task, then restored — 2026-09-20
+
+- **Tried and reverted the same day.** Claude was briefly given Terraform authoring (Jackson keeping AWS terminal, AWS console and CI/CD). It covered exactly one task: Claude wrote `infra/dynamodb.tf`, Jackson ran `plan` and `apply`. Jackson then restored the 09-15 split
+- **The 09-15 reversal stands unchanged:** Jackson writes everything GitHub, everything AWS, and all Terraform/IaC. Claude writes application code and guides/reviews the rest
+- **Recorded rather than deleted** because the boundary has now moved three times (09-15 original → 09-15 reversal → 09-20 narrowing → 09-20 restored). The recurring pressure point is Terraform authoring, and the restored answer is that Jackson writes it
 
 ## T3 property tests over §V1 and §V11 — 2026-09-18
 
@@ -170,7 +179,7 @@ pk = HOUSE#<house_id>    sk = MEMBER#<member_id>
 - Backend tasks (T2-T5) confirm via command output, and that gets said plainly rather than dressed up as visual. From T6 the PWA shell exists and confirmation becomes literal — run the dev server, look at it
 - Where an invariant is the point of the task, showing it fail first and then pass is the strongest confirmation available (as B1/§V14 did in T1)
 
-## PARTLY SUPERSEDED (2026-09-20, IaC clause) — Division of labor REVERSED — Jackson owns GitHub + AWS, Claude owns the code — 2026-09-15
+## Division of labor REVERSED — Jackson owns GitHub + AWS, Claude owns the code — 2026-09-15
 - **Jackson writes:** everything GitHub (Actions workflows, repo/PR flow, OIDC) and everything AWS (Cognito, DynamoDB, Lambda config, S3/CloudFront, EventBridge, CloudWatch alarms, Budgets) plus all Terraform/IaC
 - **Claude writes:** the application code — React components and CSS, the PWA shell, Python ledger core, Lambda handler bodies, `notifications.py`, and the pytest/Hypothesis property tests
 - Stated as a standing preference for **future work too**, not just Splitly: "any of these github or aws features I want to do all myself and you handle most of the developing"
