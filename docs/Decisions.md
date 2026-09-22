@@ -2,6 +2,18 @@
 
 Source of truth. Vault note `MyNotes/Projects/Splitly/Decisions.md` is an at-a-glance index pointing here.
 
+## T6.5 API Gateway + Lambda — 2026-09-22
+
+- **§V10's first half is infrastructure, not code.** The HTTP API's JWT authorizer verifies the Cognito token *before* Lambda is invoked, so an unauthenticated request never reaches application code. That is a much stronger guarantee than a middleware someone can forget to apply, which is what §V10's `⊥ forgotten` is about
+- **The handler still fails closed, and that is deliberate belt-and-braces.** The authorizer only protects a route while the route carries it. If someone later adds a route and omits `authorizer_id`, API Gateway happily passes an event with no claims. `handler.me` treats missing claims as `Unauthenticated` → 401 rather than as an anonymous caller, and `test_claims_missing_at_any_depth_is_unauthenticated` covers every shape a stripped-out authorizer leaves behind. Never infer identity from absence
+- **HTTP API (v2), not REST API (v1).** v2 is cheaper, has the JWT authorizer built in, and needs no separate deployment resource. v1's advantages — request validation, WAF, usage plans — are all things §C20 explicitly says this project does not need
+- **The execution role gets CloudWatch logs and nothing else.** DynamoDB access arrives at T7, when a handler first needs it. Growing the role with the code is both least privilege and honest about what exists
+- **The log group is a Terraform resource, not a Lambda side effect.** Left implicit, Lambda creates one with *never expires* — an unbounded cost leak, and a resource born outside Terraform, which §C42 forbids. 14-day retention
+- **The zip lands in `dist/`** — §C37's single artifact location, already gitignored. `archive_file` packages `api/src`, so `splitly.handler.me` resolves. No layer needed: `boto3` is in the Lambda runtime
+- **Code deploys move to CI at T20.** Today a code change needs `terraform apply`, which needs Jackson's MFA session. That is the wrong shape for §C34, where tests gate deploy — but there is no deploy job yet, so building the CI path now would be speculation
+- **CORS is deliberately absent.** The PWA will call this from a different origin once §C26 hosting exists, and it will need CORS then. The allowed origin is unknown until hosting has a row, and guessing `*` to fill the gap would be worse than leaving it visibly missing
+- **Verified against provider schemas locally** by copying `infra/` to a scratch dir with the backend block stripped — `init` + `validate` then run without AWS credentials. `terraform init` proper needs them, because the S3 backend does
+
 ## T6 PWA shell + B4, and T5 auth is a code not a link — 2026-09-22
 
 ### T5 — email OTP, not a magic link (§C4 amended)
