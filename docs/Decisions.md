@@ -2,6 +2,13 @@
 
 Source of truth. Vault note `MyNotes/Projects/Splitly/Decisions.md` is an at-a-glance index pointing here.
 
+## T8.5 stays its own row — 2026-09-22
+
+- **Decided: keep T8.5 separate, do not fold it into T7.** Member admin (the §C48 active toggle and the §C50 write-off action) ships as its own task after T8
+- **The reason is §V10, not size.** T8.5 is the **first and only row in §T that touches an admin-only surface**. Folded into T7 — which does not cite §V10 — the session guard would have no owning row until T20's IaC sweep at the very end. §V10's own text is `∀ admin route → session guard (⊥ forgotten)`, and merging the row is precisely how it gets forgotten
+- **The counter-argument, recorded because it is real:** the write-off half *is* mechanically T7's entry form with a different `kind`, and §C50's allocation uses the §C23 manual split mode that T7 builds. So T8.5 genuinely depends on T7. The existing order (T7 → T8 → T8.5) already handles that, and it is the right order regardless — you need to see a balance before you can sensibly forgive one
+- **The row was sharpened rather than just left alone.** It now names the §V10 test (`non-admin session → 403 on both routes`), records why it is not folded, and cites T7 as a dependency. An invariant whose row says only "admin-only" is an intention; one that names its test is a contract
+
 ## B3 — the ledger was silently truncated, and §V1 could not see it — 2026-09-22
 
 - **Found by auditing T1–T4 against the spec, not by a failing test.** `Store._query` read `response["Items"]` and ignored `LastEvaluatedKey`. DynamoDB caps a Query at 1MB, so past that point `list_entries()` returned a **prefix** of the ledger and `balances()` reported confidently wrong numbers. Reproduced against moto before it was believed: **500 entries written, 316 returned, the payer's balance off by 37%**, no error

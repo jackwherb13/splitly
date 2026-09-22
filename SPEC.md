@@ -137,7 +137,7 @@ T5 |.|Cognito invite-only magic link auth|C4,V10
 T6 |.|PWA shell — manifest, service worker, tokens, installable|C3,C25,C26,C38,C39,V13
 T7 |.|entry CRUD ui — 3 split input modes|C23,V11,V12
 T8 |.|balance view + drilldown|C7,V3
-T8.5|.|member admin — active toggle + write-off action. admin-only|C48,C50,V10
+T8.5|.|member admin — active toggle + write-off action. admin-only. ! named test ∀ V10: non-admin session → 403 ∀ both routes. 1st + only admin surface ∴ ⊥ fold → T7|C48,C50,V10,T7
 T9 |.|`notifications.py` — `send()` via `pywebpush`|C9,C31
 T10|.|push subscribe flow, button-gated after value|C17,V6
 T11|.|notify ∀ entry create, via stream|C10,C29
