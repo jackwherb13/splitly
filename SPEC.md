@@ -135,7 +135,7 @@ T2 |x|ledger core — entry model + member{id,name,active}, append-only store, d
 T2.5|x|terraform: DynamoDB entries table w/ schema from T2|C28,C42
 T3 |x|property tests: sum=0 & per-entry total|V1,V11
 T4 |x|split model resolved → C22,C23,C24|C22,V11
-T5 |~|Cognito invite-only email OTP auth. ⊥ magic link — see C4|C4,V10
+T5 |x|Cognito invite-only email OTP auth. ⊥ magic link — see C4|C4,V10
 T6 |x|PWA shell — manifest, service worker, tokens, installable|C3,C25,C26,C38,C39,V13,V16
 T7 |.|entry CRUD ui — 3 split input modes|C23,V11,V12
 T8 |.|balance view + drilldown|C7,V3
