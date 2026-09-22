@@ -29,3 +29,6 @@ Thumbs.db
 
 # vite-plugin-pwa dev-mode output
 web/dev-dist/
+
+# generated from terraform outputs — see README
+web/.env

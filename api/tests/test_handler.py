@@ -183,3 +183,14 @@ def test_an_unknown_mode_is_a_client_error(store):
 
 def test_an_unknown_route_is_a_404(store):
     assert handle(request("DELETE /entries"), None)["statusCode"] == 404
+
+
+def test_get_members_is_scoped_to_the_session_house(store):
+    """The roster the UI picks from, and it is this house's only."""
+    from splitly.ledger import Member
+
+    store.put_member("h1", Member(member_id="dan", name="Dan"))
+    store.put_member("other", Member(member_id="stranger", name="Stranger"))
+
+    body = json.loads(handle(request("GET /members"), None)["body"])
+    assert [m["member_id"] for m in body["members"]] == ["dan"]

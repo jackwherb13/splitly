@@ -24,6 +24,30 @@ python -m pip install -e "api[dev]"
 npm run build     # web -> dist/web
 ```
 
+## Configuring the web app
+
+The app reads three values at build time. None are secrets — the Cognito
+client id and the API URL ship inside every bundle by design. They are
+generated from Terraform outputs rather than committed, so they cannot drift
+from the deployed infrastructure:
+
+```
+@"
+VITE_API_URL=$(terraform -chdir=infra output -raw api_endpoint)
+VITE_COGNITO_CLIENT_ID=$(terraform -chdir=infra output -raw cognito_client_id)
+VITE_AWS_REGION=us-east-1
+"@ | Out-File -Encoding ascii web/.env
+```
+
+Re-run that after any apply that replaces the API or the user pool.
+`web/.env.example` lists the keys. Deploying the built app:
+
+```
+npm run build
+aws s3 sync dist/web "s3://$(terraform -chdir=infra output -raw web_bucket)" --delete --profile splitly
+aws cloudfront create-invalidation --distribution-id $(terraform -chdir=infra output -raw web_distribution_id) --paths "/*" --profile splitly
+```
+
 ## Running the checks
 
 `npm run verify` is the oracle. Green means done.

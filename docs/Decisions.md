@@ -2,6 +2,19 @@
 
 Source of truth. Vault note `MyNotes/Projects/Splitly/Decisions.md` is an at-a-glance index pointing here.
 
+## T7 part 2 — the UI — 2026-09-22
+
+- **The UI does not split anything.** It sends the mode and the members; the server owns §C24's remainder rule. Duplicating the maths in JavaScript would mean two implementations of §V12 and a drift that silently loses cents. `test_never_computes_shares_itself` asserts the request body carries no `shares` and no `amounts` in even mode — a negative test, because the failure mode is code appearing where it should not
+- **Manual mode is the one exception, and only for a running total.** The caller is typing the numbers, so the form shows what is left to allocate. That is a sum, not a split
+- **Money is parsed with `Math.round`, never `Math.trunc`.** `19.99 * 100` is `1998.9999…` in binary floating point; truncating loses a cent on ordinary prices. Mutation-tested: swapping to `trunc` fails with *expected 1998 to be 1999*
+- **Cognito OTP by direct `fetch`, no AWS SDK.** `InitiateAuth` and `RespondToAuthChallenge` are unsigned public operations needing no credentials and no SigV4. The SDK would have cost more bundle than the entire rest of the app
+- **A 401 clears the token and drops to the sign-in screen** rather than showing an error. The id token lasts an hour (§T5), so expiry is the normal case, not a fault
+- **Every `localStorage` access is wrapped.** It throws in private mode and with site data blocked, and an unreadable store simply means signed out
+- **No component tests, deliberately.** Testing the React tree would need jsdom and testing-library — two dependencies to assert on a shell. The logic worth testing is pure and lives in `entryBody.js`, which has 23 tests. Revisit if the UI grows real behaviour
+- **Honest note on §C36: `entryBody.js` was not written red-first.** Tests and implementation landed in the same step. Both were mutation-tested afterwards, which proves they have teeth, but it is not TDD and should not be recorded as though it were
+- **A case-only filename collision broke the build** — `EntryForm.jsx` (component) and `entryForm.js` (logic) resolve to the same module on Windows, so `import EntryForm from './EntryForm'` found the logic file and failed on its missing default export. Renamed to `entryBody.js`. Worth noting it would have resolved *differently* on Linux CI: a build that passes on one platform and fails on the other
+- **No error colour token, by §C40's own logic.** §C39 defines no red, and §C40 rejects colour-coded money because the brand is green. Errors use weight instead. Adding a red is a real palette decision with a §V13 contrast check attached — left open rather than slipped in
+
 ## T7 part 1 — handlers, split calculators, §V12 enforced at last — 2026-09-22
 
 - **§V12 finally has code behind it.** It has sat in §V since day one — `even split → remainder cents to payer, ⊥ dropped` — with nothing enforcing it. Now four Hypothesis properties do: the shares always sum to the total, every member of the split gets a share, the remainder is one lump rather than a slow leak, and the result does not depend on member order

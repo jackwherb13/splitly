@@ -35,3 +35,141 @@ main {
 .muted {
   color: var(--muted);
 }
+
+header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+main {
+  max-width: 34rem;
+  margin: 0 auto;
+}
+
+h2 {
+  font-size: 1rem;
+  margin: 1.5rem 0 0.5rem;
+}
+
+label {
+  display: block;
+  margin: 0.75rem 0 0.25rem;
+  font-size: 0.875rem;
+}
+
+input,
+select {
+  width: 100%;
+  padding: 0.6rem;
+  font: inherit;
+  color: var(--ink);
+  background: var(--surface);
+  border: 1px solid var(--rule);
+  border-radius: 6px;
+}
+
+button {
+  margin-top: 1rem;
+  padding: 0.7rem 1.1rem;
+  font: inherit;
+  color: var(--on-accent);
+  background: var(--accent);
+  border: 0;
+  border-radius: 6px;
+}
+
+button:disabled {
+  opacity: 0.5;
+}
+
+button.link {
+  margin: 0;
+  padding: 0;
+  color: var(--on-accent);
+  background: none;
+  text-decoration: underline;
+}
+
+.signin {
+  padding: 2rem 1rem;
+}
+
+.card {
+  padding: 1rem;
+  border: 1px solid var(--rule);
+  border-radius: 10px;
+}
+
+.modes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-top: 1rem;
+}
+
+button.mode {
+  margin: 0;
+  padding: 0.45rem 0.7rem;
+  font-size: 0.875rem;
+  color: var(--ink);
+  background: var(--surface);
+  border: 1px solid var(--rule);
+}
+
+button.mode.on {
+  color: var(--on-accent);
+  background: var(--accent);
+  border-color: var(--accent);
+}
+
+fieldset {
+  margin-top: 1rem;
+  padding: 0.75rem;
+  border: 1px solid var(--rule);
+  border-radius: 8px;
+}
+
+legend {
+  padding: 0 0.35rem;
+  font-size: 0.875rem;
+}
+
+.check {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 0.4rem 0;
+}
+
+.check input[type='checkbox'] {
+  width: auto;
+}
+
+/* §C40 — no colour-coded money, and no red token exists in §C39. Weight
+   carries the emphasis instead. */
+.error {
+  font-weight: 600;
+}
+
+.entries {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.entries li {
+  padding: 0.7rem 0;
+  border-bottom: 1px solid var(--rule);
+}
+
+.row {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.small {
+  font-size: 0.8125rem;
+}

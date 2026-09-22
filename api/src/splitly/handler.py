@@ -124,9 +124,23 @@ def list_entries(event):
     return _json(200, {"entries": [_as_dict(entry) for entry in entries]})
 
 
+def list_members(event):
+    members = _get_store().list_members(_house(event))
+    return _json(
+        200,
+        {
+            "members": [
+                {"member_id": m.member_id, "name": m.name, "active": m.active}
+                for m in members
+            ]
+        },
+    )
+
+
 ROUTES = {
     "POST /entries": create_entry,
     "GET /entries": list_entries,
+    "GET /members": list_members,
 }
 
 
