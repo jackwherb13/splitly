@@ -119,6 +119,8 @@ V14: ⊥ build artifact tracked by git. 2 clauses, ! both — name ⊽ content (
      a) ∀ path ∈ `git ls-files` → ∉ {dist/, *.egg-info/, node_modules/, __pycache__/, *.pyc, .terraform/, *.tfstate*}
      b) ∀ tracked file parsing as JSON obj → ⊥ {terraform_version, lineage} ⊆ keys. tf state names itself ∴ name-match alone ⊥ sufficient
      `.terraform.lock.hcl` = exception, ! committed — pins provider hashes ∀ CI
+V15: ∀ store list → ∀ matching item returned. pagination exhausted, ⊥ silent prefix (B3)
+     §V1 ⊥ sufficient — ∀ prefix of a zero-sum ledger also sums to 0 ∴ V1 blind to truncation
 ```
 
 ## §T
@@ -159,4 +161,5 @@ T16 deliberately mid-list: ship before reminders exist. wk8 clock ! start early,
 id|date|cause|fix
 B1|2026-09-15|`.gitignore` ⊥ `*.egg-info/` → editable pip install artifact swept in by `git add -A`, tracked outside dist/ ∴ §C37 violated. ⊥ check existed|V14
 B2|2026-09-16|tf state dumped to `infra/state.json` → tracked. §V14 markers match *filename*, `state.json` ∉ `*.tfstate*` ∴ check existed + passed blind. B1 shape ×2: B1 = ⊥ check, B2 = check tested wrong property|V14b
+B3|2026-09-22|`Store._query` ⊥ `LastEvaluatedKey` → `list_entries` returns only the 1st 1MB page. balance silently wrong (500 written → 316 returned, payer off 37%). §V1 passes anyway: ∀ prefix of a zero-sum ledger sums to 0 ∴ the property test is structurally blind. B1,B2 shape ×3 — B1 = ⊥ check, B2 = check tested wrong property, B3 = property untestable by the check that owns it|V15
 ```

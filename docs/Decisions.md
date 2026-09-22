@@ -2,6 +2,15 @@
 
 Source of truth. Vault note `MyNotes/Projects/Splitly/Decisions.md` is an at-a-glance index pointing here.
 
+## B3 — the ledger was silently truncated, and §V1 could not see it — 2026-09-22
+
+- **Found by auditing T1–T4 against the spec, not by a failing test.** `Store._query` read `response["Items"]` and ignored `LastEvaluatedKey`. DynamoDB caps a Query at 1MB, so past that point `list_entries()` returned a **prefix** of the ledger and `balances()` reported confidently wrong numbers. Reproduced against moto before it was believed: **500 entries written, 316 returned, the payer's balance off by 37%**, no error
+- **§V1 passed the whole time, and always would have.** A prefix of a zero-sum ledger also sums to zero. The T3 property test is *structurally* incapable of catching truncation — which is why this needed a new invariant rather than a better test
+- **New §V15:** every store list returns every matching item; pagination exhausted, no silent prefix. Proven red first — 122 of 200 — then green
+- **This is B1→B2→B3, the same failure three times, each one subtler.** B1: no check existed. B2: a check existed and tested the wrong property (filename, not content). B3: a check existed, tested the right property, and *that property was blind to the defect*. The lesson is not "write more tests" — it is that an invariant needs to be checked against the failure it is supposed to exclude
+- **Not §C20 scale work.** At roughly 300 bytes an entry the page breaks near 3,500 entries; three entries a day reaches that in about three years. A correctness bug on a normal household timeline, not a scaling concern
+- **Two weak guards hardened in the same pass, both the same shape.** `test_store_exposes_no_update_or_delete` searched method names for "update" and "delete" — `amend_entry` would have walked past it; it is now an allowlist of the four public methods. §C22's "no stored split style" had no test at all (T4 was closed on 09-15 as a *decision*, before any code existed to satisfy it); it is now an allowlist over `Entry`'s dataclass fields. Both were mutation-tested: adding `amend_entry` and adding a `split_style` field each fail exactly one test
+
 ## T2.5 DynamoDB table — 2026-09-20
 
 - **Table is named `splitly`, not `splitly-entries`.** §T2.5's row says "entries table", but T2 put entries *and* members in the same partition (`HOUSE#<id>` with `ENTRY#`/`MEMBER#` sort-key prefixes), and subscriptions, bill defs and houses will land in it too. Single-table design — naming it `entries` would be a lie by T13

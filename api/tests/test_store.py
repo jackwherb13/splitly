@@ -94,10 +94,15 @@ def test_a_rejected_duplicate_leaves_the_original_untouched(store):
     assert store.list_entries("h1")[0].description == "groceries"
 
 
-def test_store_exposes_no_update_or_delete(store):
-    """§V8 — the absence of a mutation path is the enforcement."""
-    forbidden = [name for name in dir(store) if "update" in name or "delete" in name]
-    assert forbidden == []
+def test_store_exposes_no_mutation_path(store):
+    """§V8 — the absence of a mutation path is the enforcement.
+
+    An allowlist, not a search for "update" and "delete": `amend_entry` would
+    walk straight past a name filter. Adding a public method has to be
+    deliberate, and adding a mutating one has to fail here first.
+    """
+    public = {name for name in dir(store) if not name.startswith("_")}
+    assert public == {"put_entry", "list_entries", "put_member", "list_members"}
 
 
 def test_list_entries_is_scoped_to_one_house(store):
@@ -138,3 +143,21 @@ def test_balances_derive_from_stored_entries(store):
     net = balances(store.list_entries("h1"))
     assert net["dan"] == 0
     assert sum(net.values()) == 0
+
+
+def test_list_entries_returns_every_page(store):
+    """SPEC §V15 — see B3. DynamoDB caps a Query at 1MB; a ledger past that
+    came back as a silent prefix, and `balances()` reported wrong numbers.
+
+    §V1 cannot catch this: a prefix of a zero-sum ledger also sums to zero.
+    The description is padded so the page breaks after a couple of hundred
+    entries instead of a couple of thousand.
+    """
+    padding = "x" * 8000
+    written = 200
+    for i in range(written):
+        store.put_entry(make_entry(entry_id=f"e{i:05d}", description=padding))
+
+    loaded = store.list_entries("h1")
+    assert len(loaded) == written
+    assert balances(loaded)["jackson"] == written * 6000

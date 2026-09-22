@@ -129,6 +129,26 @@ def test_balances_covers_every_member_touched_by_an_entry():
     assert set(balances([make_entry()])) == {"jackson", "alice", "dan"}
 
 
+# --- §C22: one storage format for every split style ---
+
+
+def test_entry_stores_amounts_not_the_split_style():
+    """How the numbers were reached — even, manual, all-to-one (§C23) — is a UI
+    concern. An allowlist so a new field cannot arrive unnoticed.
+    """
+    fields = {f.name for f in dataclasses.fields(make_entry())}
+    assert fields == {
+        "entry_id",
+        "house_id",
+        "created_at",
+        "description",
+        "kind",
+        "total",
+        "payer",
+        "shares",
+    }
+
+
 # --- §C48: members carry an active flag; leaving does not erase the debt ---
 
 

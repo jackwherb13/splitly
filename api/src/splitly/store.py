@@ -16,9 +16,11 @@ different key and post the bill twice. Ordering is done in Python instead;
 at four users that costs nothing (§C20).
 
 There is no update and no delete, and that absence is what enforces §V8.
+
+Queries are paged to exhaustion (§V15). A Query returns at most 1MB, and
+stopping at the first page returned a silent prefix of the ledger — see B3.
 """
 
-from collections.abc import Iterable
 from datetime import datetime
 from decimal import Decimal
 
@@ -91,12 +93,19 @@ class Store:
 
     # --- internals ---------------------------------------------------
 
-    def _query(self, house_id: str, sk_prefix: str) -> Iterable[dict]:
-        response = self._table.query(
-            KeyConditionExpression=Key("pk").eq(f"HOUSE#{house_id}")
+    def _query(self, house_id: str, sk_prefix: str) -> list[dict]:
+        # A Query returns at most 1MB. Stopping at the first page is B3.
+        kwargs = {
+            "KeyConditionExpression": Key("pk").eq(f"HOUSE#{house_id}")
             & Key("sk").begins_with(sk_prefix)
-        )
-        return response["Items"]
+        }
+        items: list[dict] = []
+        while True:
+            response = self._table.query(**kwargs)
+            items.extend(response["Items"])
+            if "LastEvaluatedKey" not in response:
+                return items
+            kwargs["ExclusiveStartKey"] = response["LastEvaluatedKey"]
 
     @staticmethod
     def _to_entry(item: dict) -> Entry:
