@@ -139,7 +139,7 @@ T4 |x|split model resolved → C22,C23,C24|C22,V11
 T5 |x|Cognito invite-only email OTP auth. ⊥ magic link — see C4|C4,V10
 T6 |x|PWA shell — manifest, service worker, tokens, installable|C3,C25,C26,C38,C39,V13,V16
 T6.5|x|terraform: HTTP API (v2) + Lambda + Cognito JWT authorizer → §I `api`. code via `archive_file` — CI takes over @ T20 (§C34). ⊥ handlers, ⊥ routes' bodies — T7 owns those|C27,C42,C4,T5,V10
-T6.6|.|terraform: S3 + CloudFront static hosting ∀ PWA → §I `pwa`. default cloudfront domain ∴ ⊥ ACM, ⊥ domain. + CORS on §I `api` w/ the real origin. custom domain + ACM = later|C26,C42,C3,T6,T6.5
+T6.6|~|terraform: S3 + CloudFront static hosting ∀ PWA → §I `pwa`. default cloudfront domain ∴ ⊥ ACM, ⊥ domain. + CORS on §I `api` w/ the real origin. custom domain + ACM = later|C26,C42,C3,T6,T6.5
 T7 |.|entry CRUD ui — 3 split input modes|C23,V11,V12
 T8 |.|balance view + drilldown|C7,V3
 T8.5|.|member admin — active toggle + write-off action. admin-only. ! named test ∀ V10: non-admin session → 403 ∀ both routes. 1st + only admin surface ∴ ⊥ fold → T7|C48,C50,V10,T7

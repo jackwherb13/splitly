@@ -52,6 +52,15 @@ resource "aws_lambda_function" "api" {
 resource "aws_apigatewayv2_api" "main" {
   name          = "splitly"
   protocol_type = "HTTP"
+
+  # The real origin, not "*". No credentials: the token rides in the
+  # Authorization header, so cookies are never in play.
+  cors_configuration {
+    allow_origins = ["https://${aws_cloudfront_distribution.web.domain_name}"]
+    allow_methods = ["GET", "POST", "OPTIONS"]
+    allow_headers = ["authorization", "content-type"]
+    max_age       = 300
+  }
 }
 
 # §V10's first half is infrastructure, not code: API Gateway verifies the

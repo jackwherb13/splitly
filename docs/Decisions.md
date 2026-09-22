@@ -2,6 +2,17 @@
 
 Source of truth. Vault note `MyNotes/Projects/Splitly/Decisions.md` is an at-a-glance index pointing here.
 
+## T6.6 hosting — 2026-09-22
+
+- **CloudFront's default certificate, no ACM, no domain.** §C26 exists so the service worker has https; the default `*.cloudfront.net` domain provides exactly that. A custom domain plus ACM is additive and can land whenever a domain is bought — it was never a prerequisite, and §C26 has been amended to stop implying it was
+- **The bucket is private; CloudFront reaches it through Origin Access Control.** Not a public website bucket, and not the older OAI. The bucket policy trusts the `cloudfront.amazonaws.com` service principal *and* pins `AWS:SourceArn` to this specific distribution, so another account's distribution cannot be pointed at it
+- **`sw.js` and `index.html` are served with caching disabled, and this is the point of the row.** A cached service worker never updates, and the failure is **silent**: installed apps keep running old code indefinitely with no error anywhere. `index.html` names the content-hashed bundles, so caching it pins the whole app to an old build. Everything else is hash-named and cached hard
+- **403 and 404 both map to `/index.html` with a 200.** Client-side routing means unknown paths are React's to resolve. A *private* bucket answers a missing key with **403, not 404**, because the reader has no `ListBucket` — mapping only 404 is the common mistake that leaves deep links broken
+- **CORS names the real CloudFront origin, never `*`.** This was the whole argument for building hosting before T7: with no origin to point at, the choice is a guess or a wildcard. `allow_credentials` is off, because the token travels in the `Authorization` header and cookies are never involved
+- **`PriceClass_100`** — US and Europe edges only. Four users (§C20)
+- **Content upload is not Terraform's job.** `aws s3 sync` now, CI at T20 — the same split already used for the Lambda zip. Terraform owns infrastructure; artifacts are deploys
+- **Known coupling, worth naming:** the API's CORS config references the distribution's generated domain name. Replacing the distribution changes that name and requires the API to be updated with it. That is the real argument for a custom domain sooner rather than later
+
 ## Three open decisions closed — 2026-09-22
 
 - **§C51 (new): `house_id` comes from the session, never the request body.** JWT `sub` → membership → house, on every route. It costs one extra read per request today. The alternative is only safe because §C20 assumes four users who know each other — and that is an assumption with an expiry date. Pinned *before* T7 writes the first route, because retrofitting it means auditing every route and missing one is a cross-tenant data leak
