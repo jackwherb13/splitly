@@ -99,6 +99,7 @@ R9|Do Not Disturb suppresses silently. 201 from push service says ⊥ about disp
 R10|tf 1.10 → S3 native locking experimental; 1.11 → GA + `dynamodb_table` deprecated, removal scheduled|https://developer.hashicorp.com/terraform/language/backend/s3
 R11|AWS free plan (post-2025): creating an Organization force-upgrades to paid → remaining Free Tier credits expire immediately. plan self-expires @ 6mo from account open | credit exhaustion|https://aws.amazon.com/free/terms
 R12|Cognito user pool: `PASSWORD` ! ∈ `allowed_first_auth_factors` — CreateUserPool 400s without it (`Password should be configured as one of the allowed first auth factors`). ∴ ⊥ pool-level passwordless. gate @ client `explicit_auth_flows` instead|observed 2026-09-22, RequestID 5425972e
+R13|CloudFront cache policy ⊍ response headers policy. cache policy = what *CloudFront* caches; ⊥ sets `Cache-Control` ∀ viewer. S3 sends none ∴ browser caches heuristically off `Last-Modified` — stale `sw.js` survives a CachingDisabled behaviour. ! both|observed 2026-09-22 on the live distribution
 ```
 
 ## §V

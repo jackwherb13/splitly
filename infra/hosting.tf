@@ -53,6 +53,21 @@ data "aws_cloudfront_cache_policy" "disabled" {
   name = "Managed-CachingDisabled"
 }
 
+# A cache policy stops CloudFront caching. It does not tell the browser
+# anything — that needs a response headers policy, or S3 sends no
+# Cache-Control at all and the browser caches heuristically (§R13).
+resource "aws_cloudfront_response_headers_policy" "no_cache" {
+  name = "splitly-no-cache"
+
+  custom_headers_config {
+    items {
+      header   = "Cache-Control"
+      value    = "no-cache"
+      override = true
+    }
+  }
+}
+
 resource "aws_cloudfront_distribution" "web" {
   enabled             = true
   default_root_object = "index.html"
@@ -77,21 +92,23 @@ resource "aws_cloudfront_distribution" "web" {
   # apps keep running old code forever. Same for the HTML that names the hashed
   # bundles. Everything else is content-hashed and safe to cache hard.
   ordered_cache_behavior {
-    path_pattern           = "/sw.js"
-    target_origin_id       = "s3"
-    viewer_protocol_policy = "redirect-to-https"
-    allowed_methods        = ["GET", "HEAD", "OPTIONS"]
-    cached_methods         = ["GET", "HEAD"]
-    cache_policy_id        = data.aws_cloudfront_cache_policy.disabled.id
+    path_pattern               = "/sw.js"
+    target_origin_id           = "s3"
+    viewer_protocol_policy     = "redirect-to-https"
+    allowed_methods            = ["GET", "HEAD", "OPTIONS"]
+    cached_methods             = ["GET", "HEAD"]
+    cache_policy_id            = data.aws_cloudfront_cache_policy.disabled.id
+    response_headers_policy_id = aws_cloudfront_response_headers_policy.no_cache.id
   }
 
   ordered_cache_behavior {
-    path_pattern           = "/index.html"
-    target_origin_id       = "s3"
-    viewer_protocol_policy = "redirect-to-https"
-    allowed_methods        = ["GET", "HEAD", "OPTIONS"]
-    cached_methods         = ["GET", "HEAD"]
-    cache_policy_id        = data.aws_cloudfront_cache_policy.disabled.id
+    path_pattern               = "/index.html"
+    target_origin_id           = "s3"
+    viewer_protocol_policy     = "redirect-to-https"
+    allowed_methods            = ["GET", "HEAD", "OPTIONS"]
+    cached_methods             = ["GET", "HEAD"]
+    cache_policy_id            = data.aws_cloudfront_cache_policy.disabled.id
+    response_headers_policy_id = aws_cloudfront_response_headers_policy.no_cache.id
   }
 
   # Client-side routing: unknown paths are React's to resolve, not S3's.
