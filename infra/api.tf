@@ -30,6 +30,23 @@ resource "aws_iam_role_policy_attachment" "api_logs" {
   policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
 }
 
+# No UpdateItem, no DeleteItem. §V8 is enforced at the IAM layer as well as
+# by the absence of store methods — a bug cannot mutate what the role
+# has no permission to touch.
+resource "aws_iam_role_policy" "api_ledger" {
+  name = "ledger-access"
+  role = aws_iam_role.api.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect   = "Allow"
+      Action   = ["dynamodb:GetItem", "dynamodb:PutItem", "dynamodb:Query"]
+      Resource = aws_dynamodb_table.ledger.arn
+    }]
+  })
+}
+
 # Born here rather than auto-created by Lambda, which would never expire (§C42).
 resource "aws_cloudwatch_log_group" "api" {
   name              = "/aws/lambda/${local.api_function_name}"
@@ -40,11 +57,17 @@ resource "aws_lambda_function" "api" {
   function_name    = local.api_function_name
   role             = aws_iam_role.api.arn
   runtime          = "python3.11"
-  handler          = "splitly.handler.me"
+  handler          = "splitly.handler.handle"
   filename         = data.archive_file.api.output_path
   source_code_hash = data.archive_file.api.output_base64sha256
   timeout          = 10
   memory_size      = 256
+
+  environment {
+    variables = {
+      SPLITLY_TABLE = aws_dynamodb_table.ledger.name
+    }
+  }
 
   depends_on = [aws_cloudwatch_log_group.api]
 }
@@ -88,6 +111,22 @@ resource "aws_apigatewayv2_integration" "api" {
 resource "aws_apigatewayv2_route" "me" {
   api_id             = aws_apigatewayv2_api.main.id
   route_key          = "GET /me"
+  target             = "integrations/${aws_apigatewayv2_integration.api.id}"
+  authorization_type = "JWT"
+  authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
+}
+
+resource "aws_apigatewayv2_route" "entries_create" {
+  api_id             = aws_apigatewayv2_api.main.id
+  route_key          = "POST /entries"
+  target             = "integrations/${aws_apigatewayv2_integration.api.id}"
+  authorization_type = "JWT"
+  authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
+}
+
+resource "aws_apigatewayv2_route" "entries_list" {
+  api_id             = aws_apigatewayv2_api.main.id
+  route_key          = "GET /entries"
   target             = "integrations/${aws_apigatewayv2_integration.api.id}"
   authorization_type = "JWT"
   authorizer_id      = aws_apigatewayv2_authorizer.cognito.id

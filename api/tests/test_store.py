@@ -102,7 +102,14 @@ def test_store_exposes_no_mutation_path(store):
     deliberate, and adding a mutating one has to fail here first.
     """
     public = {name for name in dir(store) if not name.startswith("_")}
-    assert public == {"put_entry", "list_entries", "put_member", "list_members"}
+    assert public == {
+        "put_entry",
+        "list_entries",
+        "put_member",
+        "list_members",
+        "put_user_house",
+        "house_for_user",
+    }
 
 
 def test_list_entries_is_scoped_to_one_house(store):
@@ -161,3 +168,14 @@ def test_list_entries_returns_every_page(store):
     loaded = store.list_entries("h1")
     assert len(loaded) == written
     assert balances(loaded)["jackson"] == written * 6000
+
+
+def test_house_for_user_round_trips(store):
+    """§C51 — the session's `sub` is the only input to this lookup."""
+    store.put_user_house("cognito-sub-1", "h1")
+    assert store.house_for_user("cognito-sub-1") == "h1"
+
+
+def test_house_for_an_unknown_user_is_none(store):
+    """A user with no house gets nothing, never someone else's house."""
+    assert store.house_for_user("cognito-sub-nobody") is None

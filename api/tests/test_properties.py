@@ -15,6 +15,7 @@ from hypothesis import assume, given
 from hypothesis import strategies as st
 
 from splitly.ledger import Entry, balances
+from splitly.splits import even
 
 # A fixed roster (§C20 — four people) so members collide across entries and
 # shrunk counterexamples stay readable.
@@ -104,3 +105,33 @@ def test_v11_rejects_any_total_disagreeing_with_shares(shares, delta):
     assume(total > 0)  # a non-positive total trips a different check
     with pytest.raises(ValueError, match="V11"):
         build(shares, total=total)
+
+
+# --- §V12: even split → remainder cents to payer, ⊥ dropped ---
+
+
+ROSTERS = st.lists(st.sampled_from(ROSTER), min_size=1, max_size=len(ROSTER), unique=True)
+
+
+@given(total=CENTS, members=ROSTERS, payer=st.sampled_from(ROSTER))
+def test_v12_an_even_split_never_drops_or_invents_a_cent(total, members, payer):
+    assert sum(even(total, members, payer).values()) == total
+
+
+@given(total=CENTS, members=ROSTERS, payer=st.sampled_from(ROSTER))
+def test_v12_every_member_of_the_split_gets_a_share(total, members, payer):
+    """A dropped member is a dropped debt, and §V1 would still hold."""
+    assert set(even(total, members, payer)) == set(members)
+
+
+@given(total=CENTS, members=ROSTERS, payer=st.sampled_from(ROSTER))
+def test_v12_the_remainder_is_one_lump_not_a_slow_leak(total, members, payer):
+    """§C24 — at most `members - 1` cents separate anyone, by construction."""
+    shares = even(total, members, payer)
+    assert max(shares.values()) - min(shares.values()) <= len(shares) - 1
+
+
+@given(total=CENTS, members=ROSTERS, payer=st.sampled_from(ROSTER), data=st.data())
+def test_v12_is_deterministic_regardless_of_member_order(total, members, payer, data):
+    shuffled = data.draw(st.permutations(members))
+    assert even(total, shuffled, payer) == even(total, members, payer)

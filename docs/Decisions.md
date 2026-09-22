@@ -2,6 +2,18 @@
 
 Source of truth. Vault note `MyNotes/Projects/Splitly/Decisions.md` is an at-a-glance index pointing here.
 
+## T7 part 1 — handlers, split calculators, §V12 enforced at last — 2026-09-22
+
+- **§V12 finally has code behind it.** It has sat in §V since day one — `even split → remainder cents to payer, ⊥ dropped` — with nothing enforcing it. Now four Hypothesis properties do: the shares always sum to the total, every member of the split gets a share, the remainder is one lump rather than a slow leak, and the result does not depend on member order
+- **§C24 had an unspecified edge and was amended before it was built.** It says the payer absorbs the remainder, but says nothing about the payer not being in the split — which is a real case: you buy something and split it between the other two. Amended: **first member by sorted id absorbs**. Deterministic in every case, and neither undefined nor an exception, because refusing a legitimate split would be worse than picking someone
+- **§C51 in practice: the house comes from a `USER#<sub>` → `HOUSE` key lookup.** A direct key read, not an index — the Cognito `sub` *is* the key, so there is nothing to scan and nothing to keep consistent. `test_house_id_in_the_body_is_ignored` posts an entry naming someone else's house and asserts it lands in the session's house and that the named house stays empty
+- **A user with no house is refused, never defaulted.** Falling back to a first or only house would be a cross-tenant leak the moment a second house exists
+- **§V8 is now enforced at the IAM layer too.** The Lambda role gets `GetItem`, `PutItem` and `Query` — no `UpdateItem`, no `DeleteItem`. The store already has no mutation methods; this means a bug that somehow acquired one still could not mutate the ledger, because the credential lacks the permission
+- **§V11 surfaces as a 400, not a 500.** Manual-mode amounts that do not sum to the total are the caller's mistake. `Entry.__post_init__` raises, the router maps it to a client error, and `test_shares_that_do_not_sum_to_the_total_are_a_client_error` pins that — otherwise a normal user error would page as a server fault
+- **One Lambda, one router, dispatching on `routeKey`.** Three routes, one function, one zip. Separate functions per route would mean separate deploys and cold starts for four users (§C20)
+- **Both new guards were mutation-tested.** Letting the body choose the house fails exactly `test_house_id_in_the_body_is_ignored`; dropping the even-split remainder fails exactly three §V12 properties
+- **Known bootstrap gap, not papered over:** nothing yet assigns a Cognito user to a house. T5 creates the user, T7 reads the mapping, and **T8.5 (member admin) is the row that will create it**. Until then it is a one-off `put-item`, and that is a manual step rather than a solved problem
+
 ## T6.6 hosting — 2026-09-22
 
 - **CloudFront's default certificate, no ACM, no domain.** §C26 exists so the service worker has https; the default `*.cloudfront.net` domain provides exactly that. A custom domain plus ACM is additive and can land whenever a domain is bought — it was never a prerequisite, and §C26 has been amended to stop implying it was

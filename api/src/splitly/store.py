@@ -91,6 +91,22 @@ class Store:
     def list_members(self, house_id: str) -> list[Member]:
         return [self._to_member(item) for item in self._query(house_id, "MEMBER#")]
 
+    # --- user → house (§C51) ------------------------------------------
+
+    def put_user_house(self, user_id: str, house_id: str) -> None:
+        self._table.put_item(
+            Item={"pk": f"USER#{user_id}", "sk": "HOUSE", "house_id": house_id}
+        )
+
+    def house_for_user(self, user_id: str) -> str | None:
+        """§C51 — the only way a request learns its house. Never the body.
+
+        A direct key lookup rather than an index: the Cognito `sub` is the
+        key, so there is nothing to scan and nothing to keep consistent.
+        """
+        item = self._table.get_item(Key={"pk": f"USER#{user_id}", "sk": "HOUSE"}).get("Item")
+        return item["house_id"] if item else None
+
     # --- internals ---------------------------------------------------
 
     def _query(self, house_id: str, sk_prefix: str) -> list[dict]:

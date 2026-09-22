@@ -30,7 +30,7 @@ C20|users ≈ 4, known personally. ⊥ scale work, ⊥ abuse protection
 C21|budget 5-10 h/wk
 C22|entry stores exact per-person amounts. 1 storage format ∀ splits. ⊥ store split style
 C23|split input modes ∈ v1: (1) all → 1 person (2) even (3) manual per-person. UI calculators → C22, ⊥ record kinds
-C24|even-split remainder cents → payer absorbs. deterministic
+C24|even-split remainder cents → payer absorbs. deterministic. payer ∉ split → 1st member by sorted id absorbs — legit case: payer buys, splits between others ∴ ⊥ undefined, ⊥ raise
 C25|frontend = Vite + React + `vite-plugin-pwa`. ⊥ Next.js — ⊥ SEO need, ∀ pages behind login
 C26|host = S3 + CloudFront + ACM. https ! for service worker. ACM ! only ∀ custom domain — default `*.cloudfront.net` = free https, ⊥ cert, ⊥ domain purchase ∴ hosting ships before a domain exists
 C27|api = Python on Lambda + API Gateway
@@ -141,7 +141,7 @@ T5 |x|Cognito invite-only email OTP auth. ⊥ magic link — see C4|C4,V10
 T6 |x|PWA shell — manifest, service worker, tokens, installable|C3,C25,C26,C38,C39,V13,V16
 T6.5|x|terraform: HTTP API (v2) + Lambda + Cognito JWT authorizer → §I `api`. code via `archive_file` — CI takes over @ T20 (§C34). ⊥ handlers, ⊥ routes' bodies — T7 owns those|C27,C42,C4,T5,V10
 T6.6|x|terraform: S3 + CloudFront static hosting ∀ PWA → §I `pwa`. default cloudfront domain ∴ ⊥ ACM, ⊥ domain. + CORS on §I `api` w/ the real origin. custom domain + ACM = later|C26,C42,C3,T6,T6.5
-T7 |.|entry CRUD ui — 3 split input modes|C23,V11,V12
+T7 |~|entry CRUD ui — 3 split input modes|C23,V11,V12
 T8 |.|balance view + drilldown|C7,V3
 T8.5|.|member admin — active toggle + write-off action. admin-only. ! named test ∀ V10: non-admin session → 403 ∀ both routes. 1st + only admin surface ∴ ⊥ fold → T7|C48,C50,V10,T7
 T9 |.|`notifications.py` — `send()` via `pywebpush`|C9,C31
