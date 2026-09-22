@@ -10,7 +10,7 @@ shared house ledger — who owes who, recurring bills auto-split & posted, unpai
 C1 |accept: wk8 → housemate logs|settles unprompted ∈ 7d window
 C2 |⊥ money movement. record payments only → deep-link Venmo
 C3 |v1 = installable PWA. Expo/RN after ledger proven. house 100% iOS
-C4 |auth = invite-only email OTP on Cognito. admin-created users. ⊥ self-signup. ⊥ magic link — iOS opens a mailed link in Safari, ⊥ the standalone PWA ∴ session lands in the wrong browsing context (§C3,§R1). code typed into the open app has no such split. also ⊥ 3 custom-auth Lambda triggers — OTP is native
+C4 |auth = invite-only email OTP on Cognito. admin-created users. ⊥ self-signup. ⊥ magic link — iOS opens a mailed link in Safari, ⊥ the standalone PWA ∴ session lands in the wrong browsing context (§C3,§R1). code typed into the open app has no such split. also ⊥ 3 custom-auth Lambda triggers — OTP is native. pool ! lists PASSWORD as an allowed factor (§R12, AWS refuses otherwise) — web client omits ∀ password flow ∴ unreachable, + ⊥ password ever set|delivered
 C5 |cloud = AWS. ! IaC + CI/CD + observability + known monthly cost
 C6 |ledger append-only. entries immutable. balance derived by sum, ⊥ stored
 C7 |∀ balance → drills down to entries that produced it
@@ -97,6 +97,7 @@ R8|A2P 10DLC Sole Proprietor brand = $4.50 one-time. toll-free number skips regi
 R9|Do Not Disturb suppresses silently. 201 from push service says ⊥ about display|https://developer.apple.com/forums/thread/770749
 R10|tf 1.10 → S3 native locking experimental; 1.11 → GA + `dynamodb_table` deprecated, removal scheduled|https://developer.hashicorp.com/terraform/language/backend/s3
 R11|AWS free plan (post-2025): creating an Organization force-upgrades to paid → remaining Free Tier credits expire immediately. plan self-expires @ 6mo from account open | credit exhaustion|https://aws.amazon.com/free/terms
+R12|Cognito user pool: `PASSWORD` ! ∈ `allowed_first_auth_factors` — CreateUserPool 400s without it (`Password should be configured as one of the allowed first auth factors`). ∴ ⊥ pool-level passwordless. gate @ client `explicit_auth_flows` instead|observed 2026-09-22, RequestID 5425972e
 ```
 
 ## §V

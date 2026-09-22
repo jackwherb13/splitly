@@ -12,8 +12,10 @@ resource "aws_cognito_user_pool" "main" {
   # Email OTP is an Essentials feature. Lite does not have it.
   user_pool_tier = "ESSENTIALS"
 
+  # PASSWORD is not optional here — the API rejects any list without it
+  # (§R12). The web client is what actually withholds password auth.
   sign_in_policy {
-    allowed_first_auth_factors = ["EMAIL_OTP"]
+    allowed_first_auth_factors = ["PASSWORD", "EMAIL_OTP"]
   }
 
   # Required by the API even though nobody will ever type one.
