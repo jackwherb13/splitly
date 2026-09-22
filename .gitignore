@@ -26,3 +26,6 @@ infra/state.json
 # editor / os
 .DS_Store
 Thumbs.db
+
+# vite-plugin-pwa dev-mode output
+web/dev-dist/

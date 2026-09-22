@@ -1,0 +1,13 @@
+/* The palette. SPEC §C38 is the brand pair, §C39 the derived tokens.
+   tokens.test.js checks every value here against §V13 and §V16 — see B4. */
+
+:root {
+  --accent: #064E3B;
+  --champagne: #F8E7C9;
+
+  --surface: #FFFCF5;
+  --ink: #1A2B24;
+  --muted: #4B5851;
+  --rule: #E8D3AE;
+  --on-accent: #F8E7C9;
+}

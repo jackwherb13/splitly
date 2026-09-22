@@ -6,7 +6,7 @@
   "scripts": {
     "build": "npm --prefix web run build",
     "lint": "npm --prefix web run lint && ruff check api",
-    "test": "cd api && python -m pytest -q",
-    "verify": "npm run lint && npm run test && npm run build"
+    "test": "npm --prefix web run test && cd api && python -m pytest -q",
+    "verify": "npm run lint && npm run build && npm run test"
   }
 }

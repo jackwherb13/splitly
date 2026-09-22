@@ -2,6 +2,26 @@
 
 Source of truth. Vault note `MyNotes/Projects/Splitly/Decisions.md` is an at-a-glance index pointing here.
 
+## T6 PWA shell + B4, and T5 auth is a code not a link — 2026-09-22
+
+### T5 — email OTP, not a magic link (§C4 amended)
+
+- **A magic link is the wrong mechanism on iOS, and iOS is the whole house (§C3).** The app runs from the home screen because §R1 requires that before Safari will deliver push at all. A link tapped in Mail opens **Safari**, a different browsing context with different storage from the standalone PWA — so the session lands somewhere the app cannot see it. There is no reliable way to route an https link into an installed PWA on iOS
+- **A six-digit code typed into the already-open app has no cross-context problem**, and Cognito ships managed passwordless email OTP natively. The link version needs three custom-auth Lambda triggers (`DefineAuthChallenge`, `CreateAuthChallenge`, `VerifyAuthChallengeResponse`) written, deployed and maintained. Better mechanism *and* far less code
+- **Confidence, stated honestly:** the iOS routing claim is reasoned from how standalone web apps work, **not tested on Jackson's phone**. It is recorded in §C4 as rationale rather than as an §R row, because §R is for sourced external findings and this has no source
+- **`ESSENTIALS` tier, deliberately.** Email OTP is not in the Lite tier. At four users the tier difference is cents
+- **`generate_secret = false`** — a browser app cannot keep a secret, so the client is public and the trust boundary is the OTP, not a shared string
+- **T5 does not satisfy §V10.** T5 issues a session; §V10 is about guarding admin routes with one, which is T8.5's named test. The row was not allowed to claim more than it does
+
+### T6 — PWA shell
+
+- **B4: §C39's `muted` token was 5.19:1 on surface, violating §V13's own 7:1 AAA requirement.** Caught by writing §V13's test, which had never existed — §C39 and §V13 were written in the same session and the test was not due until T6, so concrete hex values sat in prose, governed by an invariant, unchecked. Fixed to `#4B5851` (7.28:1) by darkening in HLS with hue and saturation held, so it is the same colour and not a new one
+- **New §V16: the spec's palette and `tokens.css` must carry an identical hex set.** Without it, §V13 keeps passing on the code while §C38/§C39 quietly lie. That is the actual B4 lesson — values living in prose go unchecked — so closing it needed an invariant, not just a corrected number
+- **The token table is `tokens.css`, not a JS constants file.** The test parses the CSS that actually ships, so the spec, the test and the browser cannot disagree
+- **Added vitest rather than parsing CSS from pytest.** Frontend tests are inevitable from T7, §V13 is a frontend concern, and a JS project testing its own stylesheet from Python is the wrong answer. **Pinned to 2.x**: vitest 5 requires Vite 6+ and the project is on Vite 5, and upgrading Vite mid-task is churn this row did not ask for
+- **`npm run verify` now builds *before* it tests.** §C3's word is "installable", so the check reads the built `manifest.webmanifest` and `sw.js`. Asserting on `vite.config.js` would prove only that we asked for a manifest — the §B2 shape again. It also catches a manifest naming an icon that was never built, which was mutation-tested
+- **Icons are generated PNGs, not SVG.** iOS ignores SVG for `apple-touch-icon`, and the house is 100% iOS. Four files: 192, 512, a maskable 512 with an 18% safe zone for Android circle masks, and the 180 apple-touch-icon
+
 ## T8.5 stays its own row — 2026-09-22
 
 - **Decided: keep T8.5 separate, do not fold it into T7.** Member admin (the §C48 active toggle and the §C50 write-off action) ships as its own task after T8

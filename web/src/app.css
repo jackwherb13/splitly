@@ -1,0 +1,37 @@
+@import './tokens.css';
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: var(--surface);
+  color: var(--ink);
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+  line-height: 1.5;
+}
+
+header {
+  background: var(--accent);
+  color: var(--on-accent);
+  /* Home-screen web apps run under the notch. */
+  padding: calc(1rem + env(safe-area-inset-top)) 1rem 1rem;
+}
+
+header h1 {
+  margin: 0;
+  font-size: 1.25rem;
+  letter-spacing: 0.02em;
+}
+
+main {
+  padding: 1rem;
+  border-top: 1px solid var(--rule);
+}
+
+.muted {
+  color: var(--muted);
+}

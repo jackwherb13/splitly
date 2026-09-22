@@ -10,7 +10,7 @@ shared house ledger — who owes who, recurring bills auto-split & posted, unpai
 C1 |accept: wk8 → housemate logs|settles unprompted ∈ 7d window
 C2 |⊥ money movement. record payments only → deep-link Venmo
 C3 |v1 = installable PWA. Expo/RN after ledger proven. house 100% iOS
-C4 |auth = invite-only magic link on Cognito. admin-created users. ⊥ self-signup
+C4 |auth = invite-only email OTP on Cognito. admin-created users. ⊥ self-signup. ⊥ magic link — iOS opens a mailed link in Safari, ⊥ the standalone PWA ∴ session lands in the wrong browsing context (§C3,§R1). code typed into the open app has no such split. also ⊥ 3 custom-auth Lambda triggers — OTP is native
 C5 |cloud = AWS. ! IaC + CI/CD + observability + known monthly cost
 C6 |ledger append-only. entries immutable. balance derived by sum, ⊥ stored
 C7 |∀ balance → drills down to entries that produced it
@@ -45,7 +45,7 @@ C35|observability = CloudWatch alarms ∀ job failure + delivery-rate dashboard 
 C36|TDD ! — test first, ∀ code. per `~/.claude/CLAUDE.md` §6
 C37|build = 1 step. artifacts → 1 location, gitignored. per `~/.claude/CLAUDE.md` §5
 C38|palette = Emerald Ink `#064E3B` + Champagne `#F8E7C9`. chosen 2026-09-15 — only pair clearing AAA
-C39|derived tokens, ⊥ user-named, ? adjustable: surface `#FFFCF5` · ink `#1A2B24` · muted `#5F6F66` · rule `#E8D3AE` · on-accent `#F8E7C9`
+C39|derived tokens, ⊥ user-named, ? adjustable: surface `#FFFCF5` · ink `#1A2B24` · muted `#4B5851` · rule `#E8D3AE` · on-accent `#F8E7C9` — ∀ value ! clears V13, ⊥ eyeballed (B4)
 C40|⊥ green for +/− amounts. brand is green ∴ sign colour would read as brand. amounts in ink, sign by glyph + weight
 C41|∀ §T complete → update `docs/Decisions.md` (if a decision was made) + vault `Progress.md` + vault `Status.md` if phase moved. ⊥ optional, ⊥ "at session end"
 C42|∀ AWS resource ! born in Terraform. ⊥ console-first-then-import — weaker story & drift risk
@@ -121,6 +121,7 @@ V14: ⊥ build artifact tracked by git. 2 clauses, ! both — name ⊽ content (
      `.terraform.lock.hcl` = exception, ! committed — pins provider hashes ∀ CI
 V15: ∀ store list → ∀ matching item returned. pagination exhausted, ⊥ silent prefix (B3)
      §V1 ⊥ sufficient — ∀ prefix of a zero-sum ledger also sums to 0 ∴ V1 blind to truncation
+V16: §C38+§C39 hex set ⊍ `web/src/tokens.css` → ! identical. spec ⊥ drift from shipped palette (B4)
 ```
 
 ## §T
@@ -133,8 +134,8 @@ T2 |x|ledger core — entry model + member{id,name,active}, append-only store, d
 T2.5|x|terraform: DynamoDB entries table w/ schema from T2|C28,C42
 T3 |x|property tests: sum=0 & per-entry total|V1,V11
 T4 |x|split model resolved → C22,C23,C24|C22,V11
-T5 |.|Cognito invite-only magic link auth|C4,V10
-T6 |.|PWA shell — manifest, service worker, tokens, installable|C3,C25,C26,C38,C39,V13
+T5 |~|Cognito invite-only email OTP auth. ⊥ magic link — see C4|C4,V10
+T6 |x|PWA shell — manifest, service worker, tokens, installable|C3,C25,C26,C38,C39,V13,V16
 T7 |.|entry CRUD ui — 3 split input modes|C23,V11,V12
 T8 |.|balance view + drilldown|C7,V3
 T8.5|.|member admin — active toggle + write-off action. admin-only. ! named test ∀ V10: non-admin session → 403 ∀ both routes. 1st + only admin surface ∴ ⊥ fold → T7|C48,C50,V10,T7
@@ -162,4 +163,5 @@ id|date|cause|fix
 B1|2026-09-15|`.gitignore` ⊥ `*.egg-info/` → editable pip install artifact swept in by `git add -A`, tracked outside dist/ ∴ §C37 violated. ⊥ check existed|V14
 B2|2026-09-16|tf state dumped to `infra/state.json` → tracked. §V14 markers match *filename*, `state.json` ∉ `*.tfstate*` ∴ check existed + passed blind. B1 shape ×2: B1 = ⊥ check, B2 = check tested wrong property|V14b
 B3|2026-09-22|`Store._query` ⊥ `LastEvaluatedKey` → `list_entries` returns only the 1st 1MB page. balance silently wrong (500 written → 316 returned, payer off 37%). §V1 passes anyway: ∀ prefix of a zero-sum ledger sums to 0 ∴ the property test is structurally blind. B1,B2 shape ×3 — B1 = ⊥ check, B2 = check tested wrong property, B3 = property untestable by the check that owns it|V15
+B4|2026-09-22|§C39 `muted` #5F6F66 = 5.19:1 on surface #FFFCF5 → violates §V13 (7:1 AAA). §C39 + §V13 written same session, §V13's test ⊥ due until T6 ∴ concrete values sat in prose, governed by an invariant, unchecked. → #4B5851 (7.28:1), hue+sat held. B1-B3 family, 4th variant: the check ⊥ existed *yet*|V16
 ```
