@@ -32,7 +32,7 @@ C22|entry stores exact per-person amounts. 1 storage format ∀ splits. ⊥ stor
 C23|split input modes ∈ v1: (1) all → 1 person (2) even (3) manual per-person. UI calculators → C22, ⊥ record kinds
 C24|even-split remainder cents → payer absorbs. deterministic
 C25|frontend = Vite + React + `vite-plugin-pwa`. ⊥ Next.js — ⊥ SEO need, ∀ pages behind login
-C26|host = S3 + CloudFront + ACM. https ! for service worker
+C26|host = S3 + CloudFront + ACM. https ! for service worker. ACM ! only ∀ custom domain — default `*.cloudfront.net` = free https, ⊥ cert, ⊥ domain purchase ∴ hosting ships before a domain exists
 C27|api = Python on Lambda + API Gateway
 C28|db = DynamoDB. ⊥ RDS|Aurora — ~$40/mo floor ∀ 4 users
 C29|entry written → DynamoDB Streams → Lambda → notify (= C10 trigger 1, ⊥ polling)
@@ -57,6 +57,7 @@ C47|local AWS auth = IAM user w/ only `sts:AssumeRole` → `AdminMFA` role, gate
 C48|member carries `active` flag. inactive → ∉ new splits. entries + balance untouched ∴ debt persists. "settled" = derived (balance == 0), ⊥ stored — same argument as C6
 C49|⊥ proration ∀ mid-cycle move-in|out. partial month → manual split mode (C23). house agrees number, app records it. ⊥ move-in|out dates, ⊥ day-count math
 C50|write-off = ordinary entry, admin-only (V10), tagged ⊽ payment ∴ drilldown shows forgiven, ⊥ paid. allocation via manual mode (C23) — even split would recover 1 person's loss from another. ⊥ deletion (C6,V8). balance → 0 ∴ reminders stop via V5
+C51|house_id ← session ∀ request. JWT `sub` → membership → house. ⊥ client-supplied id ∀ route. cheap now, ⊥ route-by-route audit later — C20's "4 known users" is the only thing making the alternative safe, and that is an assumption with an expiry date
 ```
 
 open `?` — ! resolve before §T reaches them:
@@ -138,6 +139,7 @@ T4 |x|split model resolved → C22,C23,C24|C22,V11
 T5 |x|Cognito invite-only email OTP auth. ⊥ magic link — see C4|C4,V10
 T6 |x|PWA shell — manifest, service worker, tokens, installable|C3,C25,C26,C38,C39,V13,V16
 T6.5|x|terraform: HTTP API (v2) + Lambda + Cognito JWT authorizer → §I `api`. code via `archive_file` — CI takes over @ T20 (§C34). ⊥ handlers, ⊥ routes' bodies — T7 owns those|C27,C42,C4,T5,V10
+T6.6|.|terraform: S3 + CloudFront static hosting ∀ PWA → §I `pwa`. default cloudfront domain ∴ ⊥ ACM, ⊥ domain. + CORS on §I `api` w/ the real origin. custom domain + ACM = later|C26,C42,C3,T6,T6.5
 T7 |.|entry CRUD ui — 3 split input modes|C23,V11,V12
 T8 |.|balance view + drilldown|C7,V3
 T8.5|.|member admin — active toggle + write-off action. admin-only. ! named test ∀ V10: non-admin session → 403 ∀ both routes. 1st + only admin surface ∴ ⊥ fold → T7|C48,C50,V10,T7
@@ -145,7 +147,7 @@ T9 |.|`notifications.py` — `send()` via `pywebpush`|C9,C31
 T10|.|push subscribe flow, button-gated after value|C17,V6
 T11|.|notify ∀ entry create, via stream|C10,C29
 T12|.|manual nudge|C10
-T13|.|sub lifecycle — re-subscribe @ launch, 410 handling|C15,V7
+T13|.|sub lifecycle — re-subscribe @ launch, 410 handling. + request Storage API persistent mode @ same startup path (C16)|C15,C16,V7
 T14|.|delivery receipt ping + rate view|C19,V9
 T15|.|onboarding — Add to Home Screen walkthrough|C18
 T16|.|SHIP to house. wk8 clock starts|C1

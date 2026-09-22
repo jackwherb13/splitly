@@ -2,6 +2,14 @@
 
 Source of truth. Vault note `MyNotes/Projects/Splitly/Decisions.md` is an at-a-glance index pointing here.
 
+## Three open decisions closed — 2026-09-22
+
+- **§C51 (new): `house_id` comes from the session, never the request body.** JWT `sub` → membership → house, on every route. It costs one extra read per request today. The alternative is only safe because §C20 assumes four users who know each other — and that is an assumption with an expiry date. Pinned *before* T7 writes the first route, because retrofitting it means auditing every route and missing one is a cross-tenant data leak
+- **New T6.6: hosting lands before T7, not after.** The trigger was noticing §C26 overstates its own cost: **ACM is only needed for a custom domain**. CloudFront's default `*.cloudfront.net` domain serves free HTTPS with no certificate and no domain purchase, which is enough for the service worker §C26 exists to enable. So hosting is a small Terraform task, not a blocked one. §C26 amended to say so rather than leaving the row implying a domain is a prerequisite
+- **Why hosting first changes T7 materially:** it gives a real origin, so CORS is configured against something true instead of guessed at with `*`, and it lets the PWA be installed on an actual iPhone while T7 is being built. §C3 is an iOS-first spec and T6's whole point was installability — testing that on localhost proves very little
+- **§C16 folds into T13 rather than getting its own row.** T13 already runs at app launch for push-subscription lifecycle, and requesting Storage API persistent mode belongs in that same startup path. Reopening T6 was rejected: it is marked `x` and was verified, and muddying that history to place a few lines is a bad trade
+- **Rejected: CORS with `*` as a stopgap.** It would have unblocked T7 immediately with no infra work, but it leaves a permissive config that nothing in the spec forces anyone to tighten. A visible gap is safer than a quiet one
+
 ## T6.5 API Gateway + Lambda — 2026-09-22
 
 - **§V10's first half is infrastructure, not code.** The HTTP API's JWT authorizer verifies the Cognito token *before* Lambda is invoked, so an unauthenticated request never reaches application code. That is a much stronger guarantee than a middleware someone can forget to apply, which is what §V10's `⊥ forgotten` is about
