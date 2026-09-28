@@ -4,6 +4,8 @@ Source of truth. Vault note `MyNotes/Projects/Splitly/Decisions.md` is an at-a-g
 
 ## T8.5 member admin — and B6, an authorization bypass that had shipped — 2026-09-28
 
+- **Verified on the phone, 2026-09-28.** Admin section visible to the admin session only; marking a member as left removed them from the split options while their balance stayed in “Who owes who”; a write-off zeroed the debt with the original expense still on the ledger beside it
+
 ### B6 — any member could forgive their own debt
 
 - **`POST /entries` took `kind` verbatim**, so `kind: "write_off"` from an ordinary member produced a write-off — and §C50 says write-offs are admin-only. It was deployed and reachable
