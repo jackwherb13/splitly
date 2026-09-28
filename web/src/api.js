@@ -29,6 +29,8 @@ export const listEntries = () => call('/entries').then((data) => data.entries)
 export const listMembers = () => call('/members').then((data) => data.members)
 export const listBalances = () => call('/balances').then((data) => data.balances)
 export const whoami = () => call('/me')
+export const saveSubscription = (subscription) =>
+  call('/subscriptions', { method: 'POST', body: JSON.stringify({ subscription }) })
 export const setMemberActive = (memberId, active) =>
   call(`/members/${memberId}`, { method: 'PUT', body: JSON.stringify({ active }) })
 export const createWriteOff = (body) =>

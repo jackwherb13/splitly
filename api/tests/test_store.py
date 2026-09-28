@@ -109,6 +109,8 @@ def test_store_exposes_no_mutation_path(store):
         "list_members",
         "put_user_house",
         "membership",
+        "put_push_subscription",
+        "list_push_subscriptions",
     }
 
 
@@ -170,11 +172,13 @@ def test_list_entries_returns_every_page(store):
     assert balances(loaded)["jackson"] == written * 6000
 
 
-def test_membership_round_trips_with_the_admin_flag(store):
-    """§C51 — the session's `sub` is the only input. §V10 — admin rides along."""
-    store.put_user_house("cognito-sub-1", "h1", admin=True)
+def test_membership_round_trips_with_member_id_and_admin(store):
+    """§C51 — the session's `sub` is the only input. It has to yield both the
+    house and *which housemate this is*, or nothing can be addressed to them."""
+    store.put_user_house("cognito-sub-1", "h1", member_id="jackson", admin=True)
     found = store.membership("cognito-sub-1")
     assert found.house_id == "h1"
+    assert found.member_id == "jackson"
     assert found.admin is True
 
 
@@ -187,3 +191,49 @@ def test_membership_defaults_to_not_admin(store):
 def test_membership_for_an_unknown_user_is_none(store):
     """Never a default house, and never a default admin."""
     assert store.membership("cognito-sub-nobody") is None
+
+
+SUBSCRIPTION = {
+    "endpoint": "https://push.example.com/abc",
+    "keys": {"p256dh": "key", "auth": "secret"},
+}
+
+
+def test_push_subscriptions_round_trip(store):
+    store.put_push_subscription("h1", "jackson", SUBSCRIPTION)
+    stored = store.list_push_subscriptions("h1")
+    assert len(stored) == 1
+    assert stored[0]["member_id"] == "jackson"
+    assert stored[0]["subscription"] == SUBSCRIPTION
+
+
+def test_resubscribing_the_same_endpoint_does_not_duplicate(store):
+    """§C15 re-subscribes on every launch. Keying on the endpoint makes that
+    idempotent by construction rather than by a dedupe pass."""
+    store.put_push_subscription("h1", "jackson", SUBSCRIPTION)
+    store.put_push_subscription("h1", "jackson", SUBSCRIPTION)
+    assert len(store.list_push_subscriptions("h1")) == 1
+
+
+def test_one_member_can_have_several_devices(store):
+    """A phone and a laptop are two endpoints, and both should get notified."""
+    other = SUBSCRIPTION | {"endpoint": "https://push.example.com/laptop"}
+    store.put_push_subscription("h1", "jackson", SUBSCRIPTION)
+    store.put_push_subscription("h1", "jackson", other)
+    assert len(store.list_push_subscriptions("h1")) == 2
+
+
+def test_push_subscriptions_are_scoped_to_one_house(store):
+    store.put_push_subscription("h1", "jackson", SUBSCRIPTION)
+    store.put_push_subscription("other", "stranger", SUBSCRIPTION)
+    assert [s["member_id"] for s in store.list_push_subscriptions("h1")] == ["jackson"]
+
+
+def test_push_subscriptions_do_not_collide_with_entries_or_members(store):
+    """Everything shares one partition; only the sort-key prefix separates them."""
+    store.put_entry(make_entry())
+    store.put_member("h1", Member(member_id="dan", name="Dan"))
+    store.put_push_subscription("h1", "jackson", SUBSCRIPTION)
+    assert len(store.list_entries("h1")) == 1
+    assert len(store.list_members("h1")) == 1
+    assert len(store.list_push_subscriptions("h1")) == 1

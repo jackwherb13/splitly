@@ -21,6 +21,7 @@ Queries are paged to exhaustion (§V15). A Query returns at most 1MB, and
 stopping at the first page returned a silent prefix of the ledger — see B3.
 """
 
+import hashlib
 from datetime import datetime
 from decimal import Decimal
 
@@ -93,12 +94,15 @@ class Store:
 
     # --- user → house (§C51) ------------------------------------------
 
-    def put_user_house(self, user_id: str, house_id: str, admin: bool = False) -> None:
+    def put_user_house(
+        self, user_id: str, house_id: str, member_id: str = "", admin: bool = False
+    ) -> None:
         self._table.put_item(
             Item={
                 "pk": f"USER#{user_id}",
                 "sk": "HOUSE",
                 "house_id": house_id,
+                "member_id": member_id,
                 "admin": admin,
             }
         )
@@ -112,7 +116,33 @@ class Store:
         item = self._table.get_item(Key={"pk": f"USER#{user_id}", "sk": "HOUSE"}).get("Item")
         if item is None:
             return None
-        return Membership(house_id=item["house_id"], admin=bool(item.get("admin", False)))
+        return Membership(
+            house_id=item["house_id"],
+            member_id=item.get("member_id", ""),
+            admin=bool(item.get("admin", False)),
+        )
+
+    # --- push subscriptions (§C15, §C31) ------------------------------
+
+    def put_push_subscription(self, house_id: str, member_id: str, subscription: dict) -> None:
+        """Keyed on the endpoint, so §C15's re-subscribe-every-launch is
+        idempotent by construction rather than by a dedupe pass. One member
+        may hold several: a phone and a laptop are two endpoints."""
+        digest = hashlib.sha256(subscription["endpoint"].encode()).hexdigest()[:16]
+        self._table.put_item(
+            Item={
+                "pk": f"HOUSE#{house_id}",
+                "sk": f"PUSHSUB#{member_id}#{digest}",
+                "member_id": member_id,
+                "subscription": subscription,
+            }
+        )
+
+    def list_push_subscriptions(self, house_id: str) -> list[dict]:
+        return [
+            {"member_id": item["member_id"], "subscription": item["subscription"]}
+            for item in self._query(house_id, "PUSHSUB#")
+        ]
 
     # --- internals ---------------------------------------------------
 

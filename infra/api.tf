@@ -164,6 +164,14 @@ resource "aws_apigatewayv2_route" "write_off_create" {
   authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
 }
 
+resource "aws_apigatewayv2_route" "subscription_create" {
+  api_id             = aws_apigatewayv2_api.main.id
+  route_key          = "POST /subscriptions"
+  target             = "integrations/${aws_apigatewayv2_integration.api.id}"
+  authorization_type = "JWT"
+  authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
+}
+
 resource "aws_apigatewayv2_stage" "default" {
   api_id      = aws_apigatewayv2_api.main.id
   name        = "$default"

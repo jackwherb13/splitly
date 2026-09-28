@@ -43,6 +43,7 @@ class Membership:
     """
 
     house_id: str
+    member_id: str
     admin: bool = False
 
 

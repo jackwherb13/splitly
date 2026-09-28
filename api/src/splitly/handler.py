@@ -151,6 +151,7 @@ def me(event, _context):
             "sub": claims["sub"],
             "email": claims.get("email"),
             "house_id": found.house_id if found else None,
+            "member_id": found.member_id if found else None,
             "admin": bool(found and found.admin),
         },
     )
@@ -214,6 +215,22 @@ def set_member_active(event):
     )
 
 
+def create_subscription(event):
+    """§C15, §T10 — store the browser's PushSubscription against this session.
+
+    Both the house and the member come from the session (§C51), so a body
+    naming someone else is ignored the same way a body naming another house
+    is. Keyed on the endpoint, so re-subscribing at every launch overwrites
+    rather than accumulating.
+    """
+    who = _membership(event)
+    subscription = _body(event).get("subscription") or {}
+    if not subscription.get("endpoint"):
+        raise BadRequest("subscription has no endpoint")
+    _get_store().put_push_subscription(who.house_id, who.member_id, subscription)
+    return _json(201, {"member_id": who.member_id})
+
+
 def list_entries(event):
     entries = _get_store().list_entries(_house(event))
     return _json(200, {"entries": [_as_dict(entry) for entry in entries]})
@@ -261,6 +278,7 @@ ROUTES = {
     "GET /entries": (list_entries, SESSION),
     "GET /members": (list_members, SESSION),
     "GET /balances": (list_balances, SESSION),
+    "POST /subscriptions": (create_subscription, SESSION),
     "PUT /members/{member_id}": (set_member_active, ADMIN),
     "POST /write-offs": (create_write_off, ADMIN),
 }

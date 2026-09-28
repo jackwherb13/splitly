@@ -5,6 +5,7 @@ import { createEntry, listBalances, listEntries, listMembers, whoami } from './a
 import { getToken, signOut } from './auth'
 import Admin from './Admin'
 import Balances from './Balances'
+import EnablePush from './EnablePush'
 import EntryForm from './EntryForm'
 import { splittable } from './entryBody'
 import SignIn from './SignIn'
@@ -74,6 +75,10 @@ export default function App() {
           <h2>Who owes who</h2>
           <Balances balances={balances} entries={entries} members={members} />
         </section>
+
+        {/* §C17 — only once the ledger has shown something worth being
+            notified about. Never on load. */}
+        {entries.length > 0 && <EnablePush />}
 
         {members.length === 0 ? (
           <p className="muted">No members in this house yet. Member admin arrives with T8.5.</p>

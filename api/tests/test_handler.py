@@ -30,6 +30,7 @@ def test_me_returns_the_callers_identity_from_verified_claims(store):
         "sub": SUB,
         "email": "jackson@example.com",
         "house_id": "h1",
+        "member_id": "jackson",
         "admin": False,
     }
 
@@ -97,8 +98,8 @@ def store(monkeypatch):
             BillingMode="PAY_PER_REQUEST",
         )
         live = Store(ddb.Table(TABLE))
-        live.put_user_house(SUB, "h1")
-        live.put_user_house(ADMIN_SUB, "h1", admin=True)
+        live.put_user_house(SUB, "h1", member_id="jackson")
+        live.put_user_house(ADMIN_SUB, "h1", member_id="jackson", admin=True)
         monkeypatch.setattr(handler, "_store", live)
         yield live
 
@@ -353,3 +354,45 @@ def test_a_write_off_is_tagged_so_the_drilldown_can_tell_it_from_a_payment(store
     kinds = {entry["kind"] for entry in entries}
     assert "write_off" in kinds, "the server sets the kind, not the body"
     assert "payment" not in kinds
+
+
+# --- §T10: push subscriptions ---
+
+
+PUSH = {
+    "endpoint": "https://push.example.com/abc",
+    "keys": {"p256dh": "key", "auth": "secret"},
+}
+
+
+def test_a_subscription_is_stored_against_the_session_member(store):
+    """§C51 again — the body says nothing about who this is."""
+    response = handle(request("POST /subscriptions", {"subscription": PUSH}), None)
+    assert response["statusCode"] == 201
+
+    stored = store.list_push_subscriptions("h1")
+    assert len(stored) == 1
+    assert stored[0]["member_id"] == "jackson"
+    assert stored[0]["subscription"] == PUSH
+
+
+def test_a_subscription_cannot_be_filed_under_another_member(store):
+    """A body naming someone else is ignored, exactly as house_id is."""
+    handle(
+        request("POST /subscriptions", {"subscription": PUSH, "member_id": "dan"}),
+        None,
+    )
+    assert store.list_push_subscriptions("h1")[0]["member_id"] == "jackson"
+
+
+def test_resubscribing_does_not_pile_up_duplicates(store):
+    """§C15 re-subscribes on every app launch."""
+    handle(request("POST /subscriptions", {"subscription": PUSH}), None)
+    handle(request("POST /subscriptions", {"subscription": PUSH}), None)
+    assert len(store.list_push_subscriptions("h1")) == 1
+
+
+def test_a_subscription_without_an_endpoint_is_a_client_error(store):
+    assert handle(request("POST /subscriptions", {"subscription": {}}), None)[
+        "statusCode"
+    ] == 400

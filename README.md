@@ -36,6 +36,7 @@ from the deployed infrastructure:
 VITE_API_URL=$(terraform -chdir=infra output -raw api_endpoint)
 VITE_COGNITO_CLIENT_ID=$(terraform -chdir=infra output -raw cognito_client_id)
 VITE_AWS_REGION=us-east-1
+VITE_VAPID_PUBLIC_KEY=$(aws ssm get-parameter --name /splitly/vapid/public_key --query Parameter.Value --output text --profile splitly)
 "@ | Out-File -Encoding ascii web/.env
 ```
 

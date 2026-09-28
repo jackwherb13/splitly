@@ -2,6 +2,21 @@
 
 Source of truth. Vault note `MyNotes/Projects/Splitly/Decisions.md` is an at-a-glance index pointing here.
 
+## T10 push subscribe — 2026-09-28
+
+- **§V6 is proved about *import*, not just about behaviour.** The test installs a spy, resets the module registry and dynamically imports `push.js`, then asserts nothing was requested. A behavioural test would pass even if the module prompted on load
+- **That test had to be fixed before it worked.** The first version imported `./push` statically at the top of the file, so a module-level permission request crashed collection before the test ran — the build went red, but by a collection error rather than by the test that owns the invariant. Now every use is a dynamic import. The distinction matters because a collection error names no invariant, and the next person deletes the offending line without learning what it was protecting
+- **A blocked origin is refused without re-prompting.** `Notification.permission === 'denied'` means asking again does nothing except make the app look broken
+- **§C17's "after value shown" is enforced by where the component renders**, not by a comment: `App.jsx` withholds it until the ledger has at least one entry. On iOS a refused prompt is close to permanent, so the cost of asking too early is not a lost prompt but a lost user
+- **The component warns when the app is not installed** (§R1). A Safari tab reports push support and then silently never delivers, which is the worst possible failure shape — everything appears to work
+
+### A modelling gap this row surfaced
+
+- **`Membership` linked a Cognito `sub` to a house but not to a `member_id`.** The server knew which house you were in and not which housemate you were. T7 and T8 never noticed because the UI passes member ids explicitly and balances are keyed by member
+- **It had to be fixed here rather than at T11**, because a push subscription that cannot be addressed to a member is unusable, and T11 must notify *the person who owes*. Membership now carries `member_id`
+- **Subscriptions are stored under the house partition**, keyed `PUSHSUB#<member_id>#<endpoint digest>`. Keying on the endpoint makes §C15's re-subscribe-every-launch idempotent by construction rather than by a dedupe pass, and one member can hold several — a phone and a laptop are two endpoints and both should be notified
+- **The house also comes from the session**, so a body naming another member is ignored exactly as a body naming another house is (§C51)
+
 ## T9 notifications — 2026-09-28
 
 - **§C9 taken literally: one module, one `send()`, no seam.** No Protocol, no adapter, no registry. SMS was costed at §R8 and deferred, so there is exactly one implementation and nothing to select between. `test_module_exposes_send_and_no_selection_wiring` asserts the absence, because the temptation to add a `Notifier` interface is strongest before a second case exists — which is precisely when it would be guesswork
