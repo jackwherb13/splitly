@@ -10,7 +10,7 @@ from datetime import UTC, datetime
 
 import pytest
 
-from splitly.ledger import Entry, Member, balances
+from splitly.ledger import Entry, Member, balances, drilldown
 
 
 def make_entry(**overrides):
@@ -160,3 +160,32 @@ def test_inactive_member_still_has_balance():
 
 def test_members_default_to_active():
     assert Member(member_id="alice", name="Alice").active is True
+
+
+# --- §C7, §V3: every balance drills down to the entries behind it ---
+
+
+def test_drilldown_includes_entries_where_the_member_only_owes():
+    """The bug this guards: filtering on payer alone. Alice never pays for
+    anything and would have an unexplainable balance."""
+    entry = make_entry()
+    assert drilldown([entry], "alice") == [entry]
+
+
+def test_drilldown_includes_entries_the_member_paid_for():
+    entry = make_entry()
+    assert drilldown([entry], "jackson") == [entry]
+
+
+def test_drilldown_excludes_entries_that_do_not_touch_the_member():
+    theirs = make_entry()
+    not_theirs = make_entry(
+        entry_id="e2", payer="alice", total=1000, shares={"alice": 500, "dan": 500}
+    )
+    assert drilldown([theirs, not_theirs], "sam") == []
+    assert drilldown([theirs, not_theirs], "dan") == [theirs, not_theirs]
+
+
+def test_drilldown_preserves_ledger_order():
+    entries = [make_entry(entry_id="e1"), make_entry(entry_id="e2")]
+    assert [e.entry_id for e in drilldown(entries, "dan")] == ["e1", "e2"]

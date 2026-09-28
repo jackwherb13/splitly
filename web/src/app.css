@@ -173,3 +173,39 @@ legend {
 .small {
   font-size: 0.8125rem;
 }
+
+.balances,
+.drill {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+button.balance {
+  display: flex;
+  width: 100%;
+  justify-content: space-between;
+  gap: 1rem;
+  margin: 0;
+  padding: 0.7rem 0;
+  font: inherit;
+  text-align: left;
+  color: var(--ink);
+  background: none;
+  border: 0;
+  border-bottom: 1px solid var(--rule);
+}
+
+/* §C40 — weight, not colour. A green "owes" would read as brand. */
+.owed {
+  font-weight: 600;
+}
+
+.drill {
+  padding: 0.25rem 0 0.75rem 0.75rem;
+  border-left: 2px solid var(--rule);
+}
+
+.drill li {
+  padding: 0.2rem 0;
+}

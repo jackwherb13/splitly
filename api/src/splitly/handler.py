@@ -17,7 +17,7 @@ from datetime import UTC, datetime
 
 import boto3
 
-from splitly.ledger import Entry
+from splitly.ledger import Entry, balances, drilldown
 from splitly.splits import all_to_one, even
 from splitly.store import Store
 
@@ -137,10 +137,35 @@ def list_members(event):
     )
 
 
+def list_balances(event):
+    """§C7, §V3 — the net and the entries behind it come from one call.
+
+    Returning the entry ids alongside the figure makes §V3 structural: the
+    UI cannot show a balance next to entries that do not account for it,
+    because it never computes either one.
+    """
+    entries = _get_store().list_entries(_house(event))
+    net = balances(entries)
+    return _json(
+        200,
+        {
+            "balances": [
+                {
+                    "member_id": member_id,
+                    "net": amount,
+                    "entry_ids": [e.entry_id for e in drilldown(entries, member_id)],
+                }
+                for member_id, amount in sorted(net.items())
+            ]
+        },
+    )
+
+
 ROUTES = {
     "POST /entries": create_entry,
     "GET /entries": list_entries,
     "GET /members": list_members,
+    "GET /balances": list_balances,
 }
 
 

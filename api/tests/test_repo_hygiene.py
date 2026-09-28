@@ -74,3 +74,42 @@ def test_no_terraform_state_tracked():
         "Terraform state is tracked by git, violating SPEC §V14:\n  "
         + "\n  ".join(offenders)
     )
+
+
+JS_EXTENSIONS = (".js", ".jsx", ".mjs", ".cjs", ".ts", ".tsx")
+
+
+def test_no_two_paths_collide_case_insensitively():
+    """SPEC §V17 — see B5.
+
+    Windows and macOS resolve `./Foo` and `./foo` to the same file; Linux
+    does not, so a colliding pair builds on one platform and fails on the
+    other — and CI is the platform the developer is not on.
+    """
+    offenders = []
+
+    by_path = {}
+    for path in tracked_files():
+        key = path.lower()
+        if key in by_path:
+            offenders.append(f"{by_path[key]} <> {path}")
+        by_path[key] = path
+
+    # An import writes no extension, so the bundler tries each in turn and
+    # Balances.jsx and balances.js are one specifier. Their full paths
+    # differ, which is exactly why the loop above cannot see them.
+    by_specifier = {}
+    for path in tracked_files():
+        directory, _, filename = path.rpartition("/")
+        stem, dot, extension = filename.rpartition(".")
+        if not dot or f".{extension}" not in JS_EXTENSIONS:
+            continue
+        key = (directory.lower(), stem.lower())
+        if key in by_specifier:
+            offenders.append(f"{by_specifier[key]} <> {path} (one import specifier)")
+        by_specifier[key] = path
+
+    assert offenders == [], (
+        "paths that resolve differently per platform, violating SPEC §V17:\n  "
+        + "\n  ".join(offenders)
+    )

@@ -27,5 +27,6 @@ async function call(path, options = {}) {
 
 export const listEntries = () => call('/entries').then((data) => data.entries)
 export const listMembers = () => call('/members').then((data) => data.members)
+export const listBalances = () => call('/balances').then((data) => data.balances)
 export const createEntry = (body) =>
   call('/entries', { method: 'POST', body: JSON.stringify(body) })

@@ -194,3 +194,30 @@ def test_get_members_is_scoped_to_the_session_house(store):
 
     body = json.loads(handle(request("GET /members"), None)["body"])
     assert [m["member_id"] for m in body["members"]] == ["dan"]
+
+
+def test_balances_come_back_with_the_entries_behind_them(store):
+    """§V3 — the figure and its drilldown arrive together, from one read."""
+    handle(request("POST /entries", EVEN_ENTRY), None)
+
+    body = json.loads(handle(request("GET /balances"), None)["body"])
+    by_member = {row["member_id"]: row for row in body["balances"]}
+
+    assert by_member["jackson"]["net"] == 1000 - 334
+    assert by_member["dan"]["net"] == -333
+    assert sum(row["net"] for row in body["balances"]) == 0
+
+    entries = json.loads(handle(request("GET /entries"), None)["body"])["entries"]
+    ids = {entry["entry_id"] for entry in entries}
+    for row in body["balances"]:
+        assert row["entry_ids"], f"{row['member_id']} has a balance with nothing behind it"
+        assert set(row["entry_ids"]) <= ids
+
+
+def test_a_member_who_only_owes_still_gets_a_drilldown(store):
+    """Alice never pays. Filtering on payer would leave her figure orphaned."""
+    handle(request("POST /entries", EVEN_ENTRY), None)
+    body = json.loads(handle(request("GET /balances"), None)["body"])
+    alice = next(row for row in body["balances"] if row["member_id"] == "alice")
+    assert alice["net"] == -333
+    assert len(alice["entry_ids"]) == 1

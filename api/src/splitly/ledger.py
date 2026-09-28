@@ -79,3 +79,18 @@ def balances(entries: Iterable[Entry]) -> dict[str, int]:
         for member_id, share in entry.shares.items():
             net[member_id] = net.get(member_id, 0) - share
     return net
+
+
+def drilldown(entries: Iterable[Entry], member_id: str) -> list[Entry]:
+    """The entries behind one member's balance (§C7, §V3).
+
+    An entry touches a member if they paid for it or owe part of it. Filtering
+    on the payer alone is the tempting mistake: someone who never pays for
+    anything would then show a balance with nothing to explain it, and §V1
+    would still hold.
+    """
+    return [
+        entry
+        for entry in entries
+        if entry.payer == member_id or member_id in entry.shares
+    ]

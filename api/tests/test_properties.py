@@ -14,7 +14,7 @@ import pytest
 from hypothesis import assume, given
 from hypothesis import strategies as st
 
-from splitly.ledger import Entry, balances
+from splitly.ledger import Entry, balances, drilldown
 from splitly.splits import even
 
 # A fixed roster (§C20 — four people) so members collide across entries and
@@ -135,3 +135,25 @@ def test_v12_the_remainder_is_one_lump_not_a_slow_leak(total, members, payer):
 def test_v12_is_deterministic_regardless_of_member_order(total, members, payer, data):
     shuffled = data.draw(st.permutations(members))
     assert even(total, shuffled, payer) == even(total, members, payer)
+
+
+# --- §V3: a balance is retrievable from the entries behind it ---
+
+
+@given(ledger=ledgers)
+def test_v3_a_members_balance_equals_the_net_of_their_drilldown(ledger):
+    """§V3 — the number shown and the entries shown must agree.
+
+    Not tautological: a drilldown that filtered on payer alone would pass
+    §V1 and still show entries that cannot account for the figure above them.
+    """
+    net = balances(ledger)
+    for member_id, shown in net.items():
+        assert balances(drilldown(ledger, member_id)).get(member_id, 0) == shown
+
+
+@given(ledger=ledgers)
+def test_v3_drilldown_never_shows_an_entry_that_does_not_touch_the_member(ledger):
+    for member_id in balances(ledger):
+        for entry in drilldown(ledger, member_id):
+            assert entry.payer == member_id or member_id in entry.shares

@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useState } from 'react'
 
 import './app.css'
-import { createEntry, listEntries, listMembers } from './api'
+import { createEntry, listBalances, listEntries, listMembers } from './api'
 import { getToken, signOut } from './auth'
+import Balances from './Balances'
 import EntryForm from './EntryForm'
 import SignIn from './SignIn'
 
@@ -12,13 +13,19 @@ export default function App() {
   const [token, setToken] = useState(getToken())
   const [entries, setEntries] = useState([])
   const [members, setMembers] = useState([])
+  const [balances, setBalances] = useState([])
   const [error, setError] = useState(null)
 
   const refresh = useCallback(async () => {
     try {
-      const [loadedEntries, loadedMembers] = await Promise.all([listEntries(), listMembers()])
+      const [loadedEntries, loadedMembers, loadedBalances] = await Promise.all([
+        listEntries(),
+        listMembers(),
+        listBalances(),
+      ])
       setEntries(loadedEntries)
       setMembers(loadedMembers)
+      setBalances(loadedBalances)
       setError(null)
     } catch (err) {
       setError(err.message)
@@ -57,6 +64,11 @@ export default function App() {
 
       <main>
         {error && <p className="error">{error}</p>}
+
+        <section>
+          <h2>Who owes who</h2>
+          <Balances balances={balances} entries={entries} members={members} />
+        </section>
 
         {members.length === 0 ? (
           <p className="muted">No members in this house yet. Member admin arrives with T8.5.</p>

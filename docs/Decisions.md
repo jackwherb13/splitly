@@ -2,6 +2,21 @@
 
 Source of truth. Vault note `MyNotes/Projects/Splitly/Decisions.md` is an at-a-glance index pointing here.
 
+## T8 balance view + drilldown, and B5 — 2026-09-28
+
+- **§V3 is made structural, not merely tested.** `GET /balances` returns each member's net *and* the ids of the entries behind it, from one read. The UI computes neither, so it cannot display a figure next to entries that fail to account for it — the two cannot disagree because they came from the same call
+- **The drilldown rule is "paid for it or owes part of it", and the payer-only version is the trap.** Someone who never pays for anything — Alice in the tests — would show a balance with nothing behind it, and §V1 would still hold, so the ledger-wide property cannot catch it. Mutation-tested: filtering on payer alone fails three tests including the §V3 property
+- **The drilldown shows each entry's *contribution*, not its total.** Credited if you paid, debited by your share. Those numbers visibly add up to the figure above them, which is §C7's "drills down to the entries that produced it" made legible rather than just true
+- **§C40 in practice:** the sign lives in words and weight, never colour, and `describeBalance` returns an amount that is never negative. A green "owes" would read as branding, since the brand is green
+- **Balance maths stays in Python.** The UI does not recompute it, for the same reason it does not split — two implementations of an invariant drift, and §V1/§V3 are proven against the Python one
+
+### B5 — the same case collision, one row later
+
+- **`Balances.jsx` and `balances.js` resolve to one import specifier.** An import writes no extension, so the bundler tries each in turn: Windows and macOS hand back the `.js`, Linux the `.jsx`. The build passes on one platform and fails on the other, and **CI is the platform the developer is not on**
+- **This was the second occurrence.** `EntryForm.jsx` / `entryForm.js` did it at T7, was written up as a hazard, and repeated one row later. A documented hazard that recurs immediately is evidence that a note is not a control — hence **§V17** and a test, not another paragraph
+- **The first draft of that test was green while the bug was live.** It compared full paths, and `Balances.jsx` and `balances.js` *are* different paths; the collision is on the directory-plus-stem that an import resolves. That is §B2's shape for the third time — a check that exists, runs, and tests the wrong property — and it was caught only because the bug was known to be present at that moment. §V17 therefore has two clauses, like §V14
+- **The guard reads `git ls-files`, so it lags the working tree until a rename is staged.** Consistent with the other §V14 hygiene checks, and correct: what matters is what gets committed
+
 ## T7 part 2 — the UI — 2026-09-22
 
 - **Verified on a real iPhone, 2026-09-28** — installed PWA → Cognito email OTP → CloudFront → API Gateway → Lambda → DynamoDB, all three split modes. That is the first time the whole chain has run end to end on the device the spec was written for (§C3, house 100% iOS), and it is what closes T7 — not the test suite, which cannot see any of those hops
