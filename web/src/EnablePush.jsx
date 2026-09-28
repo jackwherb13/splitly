@@ -12,10 +12,31 @@ export default function EnablePush() {
   const [state, setState] = useState('idle')
   const [error, setError] = useState(null)
 
-  if (!isSupported() || !PUBLIC_KEY) return null
+  // §R1 — only a home-screen web app gets push on iOS. A Safari tab has
+  // no Notification API at all, so this is where most people land first.
+  if (!isSupported()) {
+    return (
+      <section className="card">
+        <h2>Get notified</h2>
+        <p className="muted small">
+          This browser cannot show notifications. On iPhone, add Splitly to your
+          home screen and open it from there — Safari tabs never receive them.
+        </p>
+      </section>
+    )
+  }
 
-  // §R1 — a Safari tab reports support and then never delivers anything.
-  // Only a home-screen web app gets push on iOS.
+  if (!PUBLIC_KEY) {
+    return (
+      <section className="card">
+        <h2>Get notified</h2>
+        <p className="error">
+          Not configured: this build has no VAPID public key.
+        </p>
+      </section>
+    )
+  }
+
   const installed = window.matchMedia?.('(display-mode: standalone)').matches
 
   async function enable() {

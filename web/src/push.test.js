@@ -87,3 +87,27 @@ describe('the VAPID key is converted to the bytes pushManager wants', () => {
     expect(urlBase64ToUint8Array(key)).toHaveLength(65)
   })
 })
+
+
+describe('isSupported tells the caller why, by being honest about the checks', () => {
+  it('is false when the browser has no Notification API — an iOS Safari tab', async () => {
+    vi.stubGlobal('Notification', undefined)
+    vi.stubGlobal('navigator', { serviceWorker: {} })
+    const { isSupported } = await import('./push')
+    expect(isSupported()).toBe(false)
+  })
+
+  it('is false without a service worker', async () => {
+    vi.stubGlobal('Notification', { permission: 'default' })
+    vi.stubGlobal('navigator', {})
+    const { isSupported } = await import('./push')
+    expect(isSupported()).toBe(false)
+  })
+
+  it('is true when both are present', async () => {
+    vi.stubGlobal('Notification', { permission: 'default' })
+    vi.stubGlobal('navigator', { serviceWorker: {} })
+    const { isSupported } = await import('./push')
+    expect(isSupported()).toBe(true)
+  })
+})
