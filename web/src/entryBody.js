@@ -49,3 +49,11 @@ export function validate(form) {
   }
   return null
 }
+
+
+// §C48 — an inactive member is excluded from *new* splits only. They keep
+// their entries and their balance, which is why this filters the roster the
+// form offers and nothing else.
+export function splittable(members) {
+  return members.filter((member) => member.active)
+}

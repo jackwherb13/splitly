@@ -209,3 +209,12 @@ button.balance {
 .drill li {
   padding: 0.2rem 0;
 }
+
+h3 {
+  margin: 1.25rem 0 0.5rem;
+  font-size: 0.9375rem;
+}
+
+.entries .row button.mode {
+  margin: 0;
+}

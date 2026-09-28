@@ -2,7 +2,7 @@
 
 import { describe, expect, it } from 'vitest'
 
-import { allocated, buildBody, remaining, toCents, validate } from './entryBody'
+import { allocated, buildBody, remaining, splittable, toCents, validate } from './entryBody'
 
 const base = { description: 'groceries', total: 1000, payer: 'jackson' }
 
@@ -86,5 +86,24 @@ describe('validation catches what the server would 400 on', () => {
 
   it('rejects an even split with nobody in it', () => {
     expect(validate({ ...base, mode: 'even', members: [] })).toMatch(/person/)
+  })
+})
+
+
+describe('§C48 — an inactive member is out of new splits', () => {
+  const roster = [
+    { member_id: 'jackson', name: 'Jackson', active: true },
+    { member_id: 'dan', name: 'Dan', active: false },
+    { member_id: 'alice', name: 'Alice', active: true },
+  ]
+
+  it('drops members who have left', () => {
+    expect(splittable(roster).map((m) => m.member_id)).toEqual(['jackson', 'alice'])
+  })
+
+  it('does not touch the roster it was given', () => {
+    // Balances still show Dan — leaving does not erase the debt (§C48).
+    splittable(roster)
+    expect(roster).toHaveLength(3)
   })
 })

@@ -1,10 +1,12 @@
 import { useCallback, useEffect, useState } from 'react'
 
 import './app.css'
-import { createEntry, listBalances, listEntries, listMembers } from './api'
+import { createEntry, listBalances, listEntries, listMembers, whoami } from './api'
 import { getToken, signOut } from './auth'
+import Admin from './Admin'
 import Balances from './Balances'
 import EntryForm from './EntryForm'
+import { splittable } from './entryBody'
 import SignIn from './SignIn'
 
 const money = (cents) => (cents / 100).toFixed(2)
@@ -14,18 +16,21 @@ export default function App() {
   const [entries, setEntries] = useState([])
   const [members, setMembers] = useState([])
   const [balances, setBalances] = useState([])
+  const [session, setSession] = useState(null)
   const [error, setError] = useState(null)
 
   const refresh = useCallback(async () => {
     try {
-      const [loadedEntries, loadedMembers, loadedBalances] = await Promise.all([
+      const [loadedEntries, loadedMembers, loadedBalances, me] = await Promise.all([
         listEntries(),
         listMembers(),
         listBalances(),
+        whoami(),
       ])
       setEntries(loadedEntries)
       setMembers(loadedMembers)
       setBalances(loadedBalances)
+      setSession(me)
       setError(null)
     } catch (err) {
       setError(err.message)
@@ -73,7 +78,7 @@ export default function App() {
         {members.length === 0 ? (
           <p className="muted">No members in this house yet. Member admin arrives with T8.5.</p>
         ) : (
-          <EntryForm members={members} onCreated={add} />
+          <EntryForm members={splittable(members)} onCreated={add} />
         )}
 
         <section>
@@ -96,6 +101,10 @@ export default function App() {
             ))}
           </ul>
         </section>
+
+        {session?.admin && (
+          <Admin members={members} balances={balances} onChanged={refresh} />
+        )}
       </main>
     </>
   )

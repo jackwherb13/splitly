@@ -2,6 +2,28 @@
 
 Source of truth. Vault note `MyNotes/Projects/Splitly/Decisions.md` is an at-a-glance index pointing here.
 
+## T8.5 member admin — and B6, an authorization bypass that had shipped — 2026-09-28
+
+### B6 — any member could forgive their own debt
+
+- **`POST /entries` took `kind` verbatim**, so `kind: "write_off"` from an ordinary member produced a write-off — and §C50 says write-offs are admin-only. It was deployed and reachable
+- **It had been anticipated in a comment.** `ledger.py` said *"kind is not validated here — no invariant constrains it yet, and T8.5 introduces the write-off path that first cares."* So it was known, written down, and shipped anyway. That is **B5's lesson for the second time: a note is not a control.** The fix is §V18 plus a whitelist, not a better comment
+- **`MEMBER_KINDS` is a whitelist, not a blacklist.** Blocking `write_off` by name would let the next privileged kind through by default. An unknown kind is now a 400
+
+### The admin guard
+
+- **Privilege lives on the `USER#<sub>` item, which every request already reads.** `membership()` returns house and admin together, so guarding a route costs no extra read. It is also the right shape: you are an admin *of a house*, whereas a Cognito group would be global to the pool
+- **The route table declares access, and the router enforces it.** `ROUTES` maps each key to `(handler, SESSION | ADMIN)`, and `handle` checks before dispatch. Registering a route and protecting it are one act, so a new admin route cannot be added unguarded — which is what §V10's `⊥ forgotten` actually asks for. Putting the check inside each handler would be one omission away from absent
+- **The §V10 test is parametrised over that table**, so a new admin route is covered the moment it is registered rather than when someone remembers to write a test. `test_there_is_at_least_one_admin_route` guards the guard: an emptied table would otherwise make the parametrised test cover nothing and still pass — the §B2 shape, pre-empted this time
+- **`GET /me` reports `admin`, and that is not the guard.** The UI uses it to avoid offering buttons the API would refuse. The router remains the only thing enforcing anything
+
+### §C48 and §C50 in the UI
+
+- **Deactivating a member changes exactly one flag.** `test_deactivating_a_member_leaves_their_balance_alone` asserts the balances are byte-identical before and after, because §C48's whole point is that the debt persists
+- **The server sets `kind="write_off"` and never reads it from the body**, so a write-off cannot be disguised as a payment — §C7's drilldown has to show forgiven rather than paid. Mutation-tested
+- **Allocation is a single named absorber**, which is manual mode with one entry. §C50 rejects an even split because it would make a housemate who fronted nothing reimburse the one who fronted everything
+- **`splittable()` filters the roster the form offers, and nothing else.** Inactive members still appear in balances and in drilldowns — §C48 removes them from *new* splits, not from the ledger
+
 ## T8 verified, and a new T14.5 for navigation — 2026-09-28
 
 - **T8 confirmed on the phone.** Balances with working drilldown, live

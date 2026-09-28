@@ -108,7 +108,7 @@ def test_store_exposes_no_mutation_path(store):
         "put_member",
         "list_members",
         "put_user_house",
-        "house_for_user",
+        "membership",
     }
 
 
@@ -170,12 +170,20 @@ def test_list_entries_returns_every_page(store):
     assert balances(loaded)["jackson"] == written * 6000
 
 
-def test_house_for_user_round_trips(store):
-    """§C51 — the session's `sub` is the only input to this lookup."""
-    store.put_user_house("cognito-sub-1", "h1")
-    assert store.house_for_user("cognito-sub-1") == "h1"
+def test_membership_round_trips_with_the_admin_flag(store):
+    """§C51 — the session's `sub` is the only input. §V10 — admin rides along."""
+    store.put_user_house("cognito-sub-1", "h1", admin=True)
+    found = store.membership("cognito-sub-1")
+    assert found.house_id == "h1"
+    assert found.admin is True
 
 
-def test_house_for_an_unknown_user_is_none(store):
-    """A user with no house gets nothing, never someone else's house."""
-    assert store.house_for_user("cognito-sub-nobody") is None
+def test_membership_defaults_to_not_admin(store):
+    """Privilege is opt-in. A seeded user is an ordinary member."""
+    store.put_user_house("cognito-sub-2", "h1")
+    assert store.membership("cognito-sub-2").admin is False
+
+
+def test_membership_for_an_unknown_user_is_none(store):
+    """Never a default house, and never a default admin."""
+    assert store.membership("cognito-sub-nobody") is None

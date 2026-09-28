@@ -35,6 +35,18 @@ class Member:
 
 
 @dataclass(frozen=True)
+class Membership:
+    """What a signed-in user is, in one house (§C51, §V10).
+
+    Admin is a property of a person *in a house*, not of the account, which
+    is why it lives here and not in a Cognito group.
+    """
+
+    house_id: str
+    admin: bool = False
+
+
+@dataclass(frozen=True)
 class Entry:
     """One immutable ledger row (§C6, §V8).
 

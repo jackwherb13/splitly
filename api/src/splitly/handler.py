@@ -8,6 +8,13 @@ claims are an error, never an anonymous caller. Fail closed.
 §C51 is the other half: `house_id` comes from the session's `sub`, never from
 the request. A body claiming a house it does not own gets the caller's own
 house, not the one it asked for.
+
+Privilege works the same way. Every route in ROUTES declares SESSION or ADMIN
+and the router enforces it before dispatch, so registering a route and
+protecting it are one act — a new admin route cannot be added unguarded, and
+the §V10 test is parametrised over this table rather than written per route.
+B6 is why: a comment promising a later row would handle it did not stop the
+hole shipping.
 """
 
 import json
@@ -17,9 +24,17 @@ from datetime import UTC, datetime
 
 import boto3
 
-from splitly.ledger import Entry, balances, drilldown
+from splitly.ledger import Entry, Member, balances, drilldown
 from splitly.splits import all_to_one, even
 from splitly.store import Store
+
+SESSION = "session"
+ADMIN = "admin"
+
+# Kinds an ordinary member may post. `write_off` is absent deliberately: §C50
+# makes it admin-only, so it is reachable through POST /write-offs and nowhere
+# else (§V18, B6).
+MEMBER_KINDS = frozenset({"expense", "payment"})
 
 _store = None
 
@@ -42,6 +57,10 @@ class NoHouse(Exception):
     """Authenticated, but not a member of any house."""
 
 
+class Forbidden(Exception):
+    """A member where an admin is required (§V10)."""
+
+
 class BadRequest(Exception):
     """The caller got it wrong. A 400, never a 500."""
 
@@ -53,12 +72,16 @@ def _claims(event):
         raise Unauthenticated("no verified JWT claims on the request") from None
 
 
-def _house(event):
-    """§C51 — the session decides the house. There is no other input."""
-    house_id = _get_store().house_for_user(_claims(event)["sub"])
-    if house_id is None:
+def _membership(event):
+    """§C51 — the session decides the house, and the privilege. One read."""
+    found = _get_store().membership(_claims(event)["sub"])
+    if found is None:
         raise NoHouse("this user belongs to no house")
-    return house_id
+    return found
+
+
+def _house(event):
+    return _membership(event).house_id
 
 
 def _json(status, body):
@@ -67,6 +90,10 @@ def _json(status, body):
         "headers": {"content-type": "application/json"},
         "body": json.dumps(body),
     }
+
+
+def _body(event):
+    return json.loads(event.get("body") or "{}")
 
 
 def _shares(body):
@@ -95,28 +122,96 @@ def _as_dict(entry):
     }
 
 
+def _write(house_id, *, description, kind, total, payer, shares):
+    entry = Entry(
+        entry_id=str(uuid.uuid4()),
+        house_id=house_id,
+        created_at=datetime.now(UTC),
+        description=description,
+        kind=kind,
+        total=total,
+        payer=payer,
+        shares=shares,
+    )
+    _get_store().put_entry(entry)
+    return _json(201, _as_dict(entry))
+
+
 def me(event, _context):
     try:
         claims = _claims(event)
     except Unauthenticated:
         return _json(401, {"error": "unauthenticated"})
-    return _json(200, {"sub": claims["sub"], "email": claims.get("email")})
+    # Not a guard — the router is. This only lets the UI avoid offering
+    # buttons the API would refuse.
+    found = _get_store().membership(claims["sub"])
+    return _json(
+        200,
+        {
+            "sub": claims["sub"],
+            "email": claims.get("email"),
+            "house_id": found.house_id if found else None,
+            "admin": bool(found and found.admin),
+        },
+    )
 
 
 def create_entry(event):
-    body = json.loads(event.get("body") or "{}")
-    entry = Entry(
-        entry_id=str(uuid.uuid4()),
-        house_id=_house(event),
-        created_at=datetime.now(UTC),
+    body = _body(event)
+    kind = body["kind"]
+    if kind not in MEMBER_KINDS:
+        raise BadRequest(f"kind {kind!r} cannot be posted here")
+    return _write(
+        _house(event),
         description=body["description"],
-        kind=body["kind"],
+        kind=kind,
         total=body["total"],
         payer=body["payer"],
         shares=_shares(body),
     )
-    _get_store().put_entry(entry)
-    return _json(201, _as_dict(entry))
+
+
+def create_write_off(event):
+    """§C50 — forgiving a debt is an entry, not a deletion (§C6, §V8).
+
+    The kind is set here and never read from the body, so a write-off cannot
+    be disguised as a payment: §C7's drilldown has to be able to show that
+    the money was forgiven rather than paid.
+
+    Allocation is manual by design. An even split would make a housemate who
+    fronted nothing reimburse the one who fronted everything.
+    """
+    body = _body(event)
+    return _write(
+        _house(event),
+        description=body["description"],
+        kind="write_off",
+        total=body["total"],
+        payer=body["forgiven"],
+        shares=body["amounts"],
+    )
+
+
+def set_member_active(event):
+    """§C48 — leaving sets a flag. Entries and balance are untouched, so the
+    debt persists by construction rather than by anyone remembering."""
+    house_id = _house(event)
+    member_id = (event.get("pathParameters") or {}).get("member_id")
+    active = _body(event)["active"]
+
+    existing = next(
+        (m for m in _get_store().list_members(house_id) if m.member_id == member_id),
+        None,
+    )
+    if existing is None:
+        raise BadRequest(f"no such member: {member_id!r}")
+
+    updated = Member(member_id=existing.member_id, name=existing.name, active=bool(active))
+    _get_store().put_member(house_id, updated)
+    return _json(
+        200,
+        {"member_id": updated.member_id, "name": updated.name, "active": updated.active},
+    )
 
 
 def list_entries(event):
@@ -162,10 +257,12 @@ def list_balances(event):
 
 
 ROUTES = {
-    "POST /entries": create_entry,
-    "GET /entries": list_entries,
-    "GET /members": list_members,
-    "GET /balances": list_balances,
+    "POST /entries": (create_entry, SESSION),
+    "GET /entries": (list_entries, SESSION),
+    "GET /members": (list_members, SESSION),
+    "GET /balances": (list_balances, SESSION),
+    "PUT /members/{member_id}": (set_member_active, ADMIN),
+    "POST /write-offs": (create_write_off, ADMIN),
 }
 
 
@@ -174,15 +271,22 @@ def handle(event, context):
     if route == "GET /me":
         return me(event, context)
 
-    action = ROUTES.get(route)
-    if action is None:
+    registered = ROUTES.get(route)
+    if registered is None:
         return _json(404, {"error": "no such route"})
+    action, access = registered
 
     try:
+        # §V10 — enforced here, once, from the table. Not in each handler,
+        # where it would be one omission away from being absent.
+        if access == ADMIN and not _membership(event).admin:
+            raise Forbidden("admin only")
         return action(event)
     except Unauthenticated:
         return _json(401, {"error": "unauthenticated"})
     except NoHouse:
         return _json(403, {"error": "not a member of any house"})
+    except Forbidden:
+        return _json(403, {"error": "admin only"})
     except (BadRequest, ValueError, KeyError) as exc:
         return _json(400, {"error": str(exc)})

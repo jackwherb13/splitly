@@ -27,7 +27,7 @@ from decimal import Decimal
 from boto3.dynamodb.conditions import Key
 from botocore.exceptions import ClientError
 
-from splitly.ledger import Entry, Member
+from splitly.ledger import Entry, Member, Membership
 
 
 class DuplicateEntry(Exception):
@@ -93,19 +93,26 @@ class Store:
 
     # --- user → house (§C51) ------------------------------------------
 
-    def put_user_house(self, user_id: str, house_id: str) -> None:
+    def put_user_house(self, user_id: str, house_id: str, admin: bool = False) -> None:
         self._table.put_item(
-            Item={"pk": f"USER#{user_id}", "sk": "HOUSE", "house_id": house_id}
+            Item={
+                "pk": f"USER#{user_id}",
+                "sk": "HOUSE",
+                "house_id": house_id,
+                "admin": admin,
+            }
         )
 
-    def house_for_user(self, user_id: str) -> str | None:
-        """§C51 — the only way a request learns its house. Never the body.
+    def membership(self, user_id: str) -> Membership | None:
+        """§C51 — the only way a request learns its house, and its privilege.
 
-        A direct key lookup rather than an index: the Cognito `sub` is the
-        key, so there is nothing to scan and nothing to keep consistent.
+        A direct key lookup, not an index: the Cognito `sub` is the key. One
+        read serves both, so guarding an admin route costs nothing extra.
         """
         item = self._table.get_item(Key={"pk": f"USER#{user_id}", "sk": "HOUSE"}).get("Item")
-        return item["house_id"] if item else None
+        if item is None:
+            return None
+        return Membership(house_id=item["house_id"], admin=bool(item.get("admin", False)))
 
     # --- internals ---------------------------------------------------
 

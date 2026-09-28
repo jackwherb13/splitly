@@ -128,6 +128,7 @@ V16: §C38+§C39 hex set ⊍ `web/src/tokens.css` → ! identical. spec ⊥ drif
 V17: ⊥ 2 tracked paths colliding case-insensitively. 2 clauses — full path ⊍ import specifier (B5)
      a) ∀ path ∈ `git ls-files` → `path.lower()` unique
      b) ∀ JS-resolvable file → (dir, stem).lower() unique. import ⊥ writes ext ∴ `Foo.jsx` ⊍ `foo.js` = 1 specifier, ⊥ 1 path
+V18: ∀ privileged entry kind → reachable ∈ admin route only. `write_off` ∉ `POST /entries` — §C50 says admin-only, ∴ an ordinary route accepting the kind = the guard bypassed (B6)
 ```
 
 ## §T
@@ -146,7 +147,7 @@ T6.5|x|terraform: HTTP API (v2) + Lambda + Cognito JWT authorizer → §I `api`.
 T6.6|x|terraform: S3 + CloudFront static hosting ∀ PWA → §I `pwa`. default cloudfront domain ∴ ⊥ ACM, ⊥ domain. + CORS on §I `api` w/ the real origin. custom domain + ACM = later|C26,C42,C3,T6,T6.5
 T7 |x|entry CRUD ui — 3 split input modes|C23,V11,V12
 T8 |x|balance view + drilldown|C7,V3
-T8.5|.|member admin — active toggle + write-off action. admin-only. ! named test ∀ V10: non-admin session → 403 ∀ both routes. 1st + only admin surface ∴ ⊥ fold → T7|C48,C50,V10,T7
+T8.5|~|member admin — active toggle + write-off action. admin-only. ! named test ∀ V10: non-admin session → 403 ∀ both routes. 1st + only admin surface ∴ ⊥ fold → T7|C48,C50,V10,T7
 T9 |.|`notifications.py` — `send()` via `pywebpush`|C9,C31
 T10|.|push subscribe flow, button-gated after value|C17,V6
 T11|.|notify ∀ entry create, via stream|C10,C29
@@ -174,4 +175,5 @@ B2|2026-09-16|tf state dumped to `infra/state.json` → tracked. §V14 markers m
 B3|2026-09-22|`Store._query` ⊥ `LastEvaluatedKey` → `list_entries` returns only the 1st 1MB page. balance silently wrong (500 written → 316 returned, payer off 37%). §V1 passes anyway: ∀ prefix of a zero-sum ledger sums to 0 ∴ the property test is structurally blind. B1,B2 shape ×3 — B1 = ⊥ check, B2 = check tested wrong property, B3 = property untestable by the check that owns it|V15
 B4|2026-09-22|§C39 `muted` #5F6F66 = 5.19:1 on surface #FFFCF5 → violates §V13 (7:1 AAA). §C39 + §V13 written same session, §V13's test ⊥ due until T6 ∴ concrete values sat in prose, governed by an invariant, unchecked. → #4B5851 (7.28:1), hue+sat held. B1-B3 family, 4th variant: the check ⊥ existed *yet*|V16
 B5|2026-09-28|`Balances.jsx` ⊍ `balances.js` → win|mac resolve `./Balances` to the .js, linux to the .jsx ∴ build passes on 1 platform, fails on the other. 2nd occurrence — `EntryForm.jsx`/`entryForm.js` @ T7, documented, then repeated 1 row later ∴ ! a check, ⊥ a note. 1st draft of the check compared *full paths* + passed green w/ the bug live — B2 shape ×2|V17b
+B6|2026-09-28|`POST /entries` @ T7 took `kind` verbatim ∴ ∀ member could post `write_off` + forgive their own debt, bypassing §C50's admin-only. shipped + deployed. `ledger.py` docstring *anticipated* it — "T8.5 introduces the write-off path that first cares" — ∴ known, written down, still shipped. B5 lesson ×2: a note ⊥ a control|V18
 ```

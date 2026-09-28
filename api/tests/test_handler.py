@@ -15,7 +15,7 @@ import pytest
 from moto import mock_aws
 
 from splitly import handler
-from splitly.handler import Unauthenticated, handle, me
+from splitly.handler import ADMIN, ROUTES, SESSION, Unauthenticated, handle, me
 from splitly.store import Store
 
 
@@ -23,13 +23,21 @@ def event_with(claims):
     return {"requestContext": {"authorizer": {"jwt": {"claims": claims}}}}
 
 
-def test_me_returns_the_callers_identity_from_verified_claims():
-    response = me(event_with({"sub": "u-1", "email": "jackson@example.com"}), None)
+def test_me_returns_the_callers_identity_from_verified_claims(store):
+    response = me(event_with({"sub": SUB, "email": "jackson@example.com"}), None)
     assert response["statusCode"] == 200
     assert json.loads(response["body"]) == {
-        "sub": "u-1",
+        "sub": SUB,
         "email": "jackson@example.com",
+        "house_id": "h1",
+        "admin": False,
     }
+
+
+def test_me_reports_admin_for_an_admin_session(store):
+    """The UI uses this to hide controls. It is not the guard — the router is."""
+    body = json.loads(me(event_with({"sub": ADMIN_SUB}), None)["body"])
+    assert body["admin"] is True
 
 
 def test_me_rejects_a_request_with_no_verified_claims():
@@ -61,6 +69,7 @@ def test_unauthenticated_is_raised_not_swallowed_silently():
 
 TABLE = "splitly-test"
 SUB = "cognito-sub-1"
+ADMIN_SUB = "cognito-admin"
 
 
 @pytest.fixture(autouse=True)
@@ -89,14 +98,16 @@ def store(monkeypatch):
         )
         live = Store(ddb.Table(TABLE))
         live.put_user_house(SUB, "h1")
+        live.put_user_house(ADMIN_SUB, "h1", admin=True)
         monkeypatch.setattr(handler, "_store", live)
         yield live
 
 
-def request(route, body=None, sub=SUB):
+def request(route, body=None, sub=SUB, path=None):
     event = {
         "routeKey": route,
         "requestContext": {"authorizer": {"jwt": {"claims": {"sub": sub}}}},
+        "pathParameters": path or {},
     }
     if body is not None:
         event["body"] = json.dumps(body)
@@ -221,3 +232,124 @@ def test_a_member_who_only_owes_still_gets_a_drilldown(store):
     alice = next(row for row in body["balances"] if row["member_id"] == "alice")
     assert alice["net"] == -333
     assert len(alice["entry_ids"]) == 1
+
+
+# --- §V10 and §V18: admin actions are reachable only through admin routes ---
+
+
+ADMIN_ROUTES = sorted(key for key, (_, access) in ROUTES.items() if access == ADMIN)
+
+
+def test_there_is_at_least_one_admin_route():
+    """Guards the guard: if the table emptied, the §V10 test below would
+    silently cover nothing and still pass."""
+    assert ADMIN_ROUTES
+
+
+@pytest.mark.parametrize("route_key", ADMIN_ROUTES)
+def test_v10_every_admin_route_refuses_an_ordinary_member(store, route_key):
+    """§V10 — parametrised over the route table, so a new admin route is
+    covered the moment it is registered rather than when someone remembers."""
+    event = request(route_key, body={}, sub=SUB, path={"member_id": "dan"})
+    assert handle(event, None)["statusCode"] == 403
+
+
+def test_every_route_declares_an_access_level():
+    """§V10 `⊥ forgotten` — registration and protection are one act, so a
+    route cannot be added without saying who may call it."""
+    for route_key, (_, access) in ROUTES.items():
+        assert access in {SESSION, ADMIN}, route_key
+
+
+def test_v18_post_entries_refuses_a_write_off(store):
+    """§V18, B6 — §C50 makes write-offs admin-only. An ordinary route that
+    accepts the kind is the guard bypassed, and this shipped at T7."""
+    body = EVEN_ENTRY | {"kind": "write_off"}
+    assert handle(request("POST /entries", body), None)["statusCode"] == 400
+
+
+def test_post_entries_refuses_an_unknown_kind(store):
+    body = EVEN_ENTRY | {"kind": "vibes"}
+    assert handle(request("POST /entries", body), None)["statusCode"] == 400
+
+
+def test_an_admin_can_deactivate_a_member(store):
+    """§C48 — leaving sets a flag. The member and their debt stay."""
+    from splitly.ledger import Member
+
+    store.put_member("h1", Member(member_id="dan", name="Dan"))
+    response = handle(
+        request("PUT /members/{member_id}", {"active": False}, sub=ADMIN_SUB,
+                path={"member_id": "dan"}),
+        None,
+    )
+    assert response["statusCode"] == 200
+    assert store.list_members("h1")[0].active is False
+    assert store.list_members("h1")[0].name == "Dan", "the name survives the toggle"
+
+
+def test_deactivating_a_member_leaves_their_balance_alone(store):
+    """§C48 — the debt persists. That is the whole point of the flag."""
+    from splitly.ledger import Member
+
+    store.put_member("h1", Member(member_id="dan", name="Dan"))
+    handle(request("POST /entries", EVEN_ENTRY), None)
+    before = json.loads(handle(request("GET /balances"), None)["body"])
+
+    handle(
+        request("PUT /members/{member_id}", {"active": False}, sub=ADMIN_SUB,
+                path={"member_id": "dan"}),
+        None,
+    )
+    after = json.loads(handle(request("GET /balances"), None)["body"])
+    assert before == after
+
+
+def test_an_admin_can_write_off_a_debt(store):
+    """§C50 — an offsetting entry, not a deletion. The original stays."""
+    handle(request("POST /entries", EVEN_ENTRY), None)
+
+    response = handle(
+        request(
+            "POST /write-offs",
+            {
+                "description": "dan moved out owing",
+                "forgiven": "dan",
+                "total": 333,
+                "amounts": {"jackson": 333},
+            },
+            sub=ADMIN_SUB,
+        ),
+        None,
+    )
+    assert response["statusCode"] == 201
+    assert json.loads(response["body"])["kind"] == "write_off"
+
+    balances = json.loads(handle(request("GET /balances"), None)["body"])["balances"]
+    assert next(r for r in balances if r["member_id"] == "dan")["net"] == 0
+
+    entries = json.loads(handle(request("GET /entries"), None)["body"])["entries"]
+    assert len(entries) == 2, "the original expense is still on the books (§V8)"
+
+
+def test_a_write_off_is_tagged_so_the_drilldown_can_tell_it_from_a_payment(store):
+    """§C50 — forgiven, not paid. The caller cannot choose the tag."""
+    handle(request("POST /entries", EVEN_ENTRY), None)
+    handle(
+        request(
+            "POST /write-offs",
+            {
+                "description": "forgiven",
+                "forgiven": "dan",
+                "total": 333,
+                "amounts": {"jackson": 333},
+                "kind": "payment",
+            },
+            sub=ADMIN_SUB,
+        ),
+        None,
+    )
+    entries = json.loads(handle(request("GET /entries"), None)["body"])["entries"]
+    kinds = {entry["kind"] for entry in entries}
+    assert "write_off" in kinds, "the server sets the kind, not the body"
+    assert "payment" not in kinds
