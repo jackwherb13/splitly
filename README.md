@@ -21,7 +21,7 @@ dist/   all build artifacts, gitignored         (SPEC §C37)
 npm install --prefix web
 python -m pip install -e "api[dev]"
 
-npm run build     # web -> dist/web
+npm run build     # web -> dist/web, Lambda deps layer -> dist/lambda/layer
 ```
 
 ## Configuring the web app
@@ -41,6 +41,7 @@ VITE_VAPID_PUBLIC_KEY=$(aws ssm get-parameter --name /splitly/vapid/public_key -
 ```
 
 Re-run that after any apply that replaces the API or the user pool.
+`terraform apply` zips `dist/lambda/layer`, so run `npm run build` before it.
 `web/.env.example` lists the keys. Deploying the built app:
 
 ```

@@ -148,9 +148,9 @@ T6.6|x|terraform: S3 + CloudFront static hosting ∀ PWA → §I `pwa`. default 
 T7 |x|entry CRUD ui — 3 split input modes|C23,V11,V12
 T8 |x|balance view + drilldown|C7,V3
 T8.5|x|member admin — active toggle + write-off action. admin-only. ! named test ∀ V10: non-admin session → 403 ∀ both routes. 1st + only admin surface ∴ ⊥ fold → T7|C48,C50,V10,T7
-T9 |~|`notifications.py` — `send()` via `pywebpush`|C9,C31
-T10|~|push subscribe flow, button-gated after value|C17,V6
-T11|.|notify ∀ entry create, via stream. ! solve lambda dep packaging 1st — `pywebpush` ∉ the runtime + the zip = `api/src` alone ∴ importing `notifications` breaks the fn @ import time|C10,C29,T9
+T9 |x|`notifications.py` — `send()` via `pywebpush`|C9,C31
+T10|x|push subscribe flow, button-gated after value|C17,V6
+T11|x|notify ∀ entry create, via stream. ! solve lambda dep packaging 1st — `pywebpush` ∉ the runtime + the zip = `api/src` alone ∴ importing `notifications` breaks the fn @ import time|C10,C29,T9
 T12|.|manual nudge|C10
 T13|.|sub lifecycle — re-subscribe @ launch, 410 handling. + request Storage API persistent mode @ same startup path (C16)|C15,C16,V7
 T14|.|delivery receipt ping + rate view|C19,V9

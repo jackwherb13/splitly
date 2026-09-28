@@ -43,11 +43,9 @@ resource "aws_ssm_parameter" "vapid_subject" {
 
 data "aws_caller_identity" "current" {}
 
-resource "aws_iam_role_policy" "api_vapid" {
-  name = "vapid-read"
-  role = aws_iam_role.api.id
-
-  policy = jsonencode({
+# Shared by every role that sends push: the API (T12) and the stream (T11).
+locals {
+  vapid_read_policy = jsonencode({
     Version = "2012-10-17"
     Statement = [
       {
@@ -67,4 +65,10 @@ resource "aws_iam_role_policy" "api_vapid" {
       },
     ]
   })
+}
+
+resource "aws_iam_role_policy" "api_vapid" {
+  name   = "vapid-read"
+  role   = aws_iam_role.api.id
+  policy = local.vapid_read_policy
 }

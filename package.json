@@ -4,7 +4,7 @@
   "private": true,
   "description": "Shared house ledger — see SPEC.md",
   "scripts": {
-    "build": "npm --prefix web run build",
+    "build": "npm --prefix web run build && python api/scripts/build_layer.py",
     "lint": "npm --prefix web run lint && ruff check api",
     "test": "npm --prefix web run test && cd api && python -m pytest -q",
     "verify": "npm run lint && npm run build && npm run test"

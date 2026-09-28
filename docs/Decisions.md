@@ -2,6 +2,17 @@
 
 Source of truth. Vault note `MyNotes/Projects/Splitly/Decisions.md` is an at-a-glance index pointing here.
 
+## T11 notify on entry create — 2026-09-28
+
+- **Dependencies ride in a Lambda layer built by `npm run build`** into `dist/lambda/layer` (§C37). The code zip stays `api/src`, so a code change does not re-upload 34MB of crypto
+- **Wheels are pinned to `manylinux2014_x86_64` / cp311**, not the build machine. `cryptography` is compiled; a plain `pip install` on Windows would ship `.pyd` files and the function would die at import — the exact landmine T9 named
+- **The first build failed, and the failure was the lesson.** A pinned platform forces `--only-binary=:all:`, and `http-ece` publishes *no wheel at all*. Fix is two passes: `pip wheel` on the host turns pure-Python sdists into `py3-none-any` wheels, then the pinned install finds them via `--find-links`. Host-only binary wheels in the same folder are ignored by the pinned install, so a compiled sdist-only dependency would still fail loudly. Classified a code bug, not a spec gap — the oracle caught it at build time, nothing silent got through
+- **Who is notified: everyone who owes on the entry** — the payer owes nothing on it, so is not. The entry does not record who typed it in; logging an expense someone else paid notifies you about your own action. **Jackson accepted that; no `created_by`**
+- **Send failures are never raised, and never quiet.** A raise makes Lambda retry the whole batch: every live subscription notified twice, and a dead one retried — the retry §V7 forbids. Mutation-tested: removing the catch fails exactly the test that owns it. Retiring dead subscriptions stays with T13
+- **Jackson asked for failures to be raised; resolved as *loud*, not raised.** Each failure logs at ERROR and emits a `PushSendFailed` metric (dimension `Reason` = `gone`|`error`) via CloudWatch Embedded Metric Format — a stdout JSON line, so no IAM or API call. T21's alarm sits on it. Raising after all sends was rejected: it keeps §V7 but re-notifies everyone who already got the push
+- **The service worker had no `push` listener.** `generateSW` ships none, so every push would have arrived and shown nothing — and iOS revokes subscriptions that stay silent. `web/public/push-sw.js` is pulled in with `workbox.importScripts`; the test runs the listener against a fake `self` rather than grepping the source
+- **Its own IAM role**: stream read + `Query` only, no `PutItem` (§V8). The VAPID policy moved into a local shared with the API role, which T12 will need to send from
+
 ## T10 push subscribe — 2026-09-28
 
 - **§V6 is proved about *import*, not just about behaviour.** The test installs a spy, resets the module registry and dynamically imports `push.js`, then asserts nothing was requested. A behavioural test would pass even if the module prompted on load
@@ -9,6 +20,9 @@ Source of truth. Vault note `MyNotes/Projects/Splitly/Decisions.md` is an at-a-g
 - **A blocked origin is refused without re-prompting.** `Notification.permission === 'denied'` means asking again does nothing except make the app look broken
 - **§C17's "after value shown" is enforced by where the component renders**, not by a comment: `App.jsx` withholds it until the ledger has at least one entry. On iOS a refused prompt is close to permanent, so the cost of asking too early is not a lost prompt but a lost user
 - **The component warns when the app is not installed** (§R1). A Safari tab reports push support and then silently never delivers, which is the worst possible failure shape — everything appears to work
+
+- **Verified on the phone 2026-09-28**, after two failures worth keeping. The card first rendered *nothing* on iOS Safari because `isSupported()` was false and the component returned `null` — the same silent-failure shape the module's own comment warned about, implemented from the other direction. It now explains and points at Add to Home Screen
+- **Then the save failed with Safari's “Load failed”, which is worth learning as a diagnostic.** The route had not been applied, and API Gateway returns a 404 for an unknown route **without** `access-control-allow-origin`. The browser therefore refuses to let the page read the response and `fetch` rejects at the network layer, so the real status never reaches the app. An existing route returns 401 **with** the header. **“Load failed” in a CORS app usually means a missing route or an unhandled 5xx, not a network fault** — the two responses that come back without CORS headers
 
 ### A modelling gap this row surfaced
 

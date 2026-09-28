@@ -9,6 +9,8 @@ export default defineConfig({
     VitePWA({
       registerType: 'autoUpdate',
       includeAssets: ['apple-touch-icon.png'],
+      // The generated worker has no push listener of its own (§T11).
+      workbox: { importScripts: ['push-sw.js'] },
       manifest: {
         name: 'Splitly',
         short_name: 'Splitly',

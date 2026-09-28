@@ -4,6 +4,10 @@ resource "aws_dynamodb_table" "ledger" {
   hash_key     = "pk"
   range_key    = "sk"
 
+  # §C29 — entry writes drive notifications (stream.tf).
+  stream_enabled   = true
+  stream_view_type = "NEW_IMAGE"
+
   attribute {
     name = "pk"
     type = "S"
