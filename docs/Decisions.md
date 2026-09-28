@@ -2,6 +2,15 @@
 
 Source of truth. Vault note `MyNotes/Projects/Splitly/Decisions.md` is an at-a-glance index pointing here.
 
+## T8 verified, and a new T14.5 for navigation — 2026-09-28
+
+- **T8 confirmed on the phone.** Balances with working drilldown, live
+- **New T14.5: three tabs — dashboard (the landing page), add cost, history.** Jackson's, asked for after using T8 on a real device, which is the right moment for a usability request to arrive. Currently everything is one long scroll: balances, then the form, then the whole ledger
+- **Placed before T15, not before T16.** Onboarding (T15) walks a housemate through the app, so the navigation has to be settled first or the walkthrough teaches a layout that is about to change. It sits after T14 because the notification work does not touch layout
+- **Deliberately not placed before T7/T8.** It restructures what those rows built; doing it first would mean designing navigation around screens that did not exist yet
+- **One decision left open in the row rather than guessed at now: a router, or `useState`.** Three tabs need no routing library, and §C25 has no router dependency. But an **installed PWA has a back gesture**, and with plain state the back swipe leaves the app instead of returning to the previous tab — which on iOS feels broken. That is a real tradeoff between a dependency and a native-feeling gesture, and it should be made with the tabs in front of us
+- **Two constraints the row carries:** §V13 applies to any new text/background pair the tab bar introduces, and the bar needs `safe-area-inset-bottom` or it sits under the iPhone home indicator — the same class of detail as the header's top inset in T6
+
 ## T8 balance view + drilldown, and B5 — 2026-09-28
 
 - **§V3 is made structural, not merely tested.** `GET /balances` returns each member's net *and* the ids of the entries behind it, from one read. The UI computes neither, so it cannot display a figure next to entries that fail to account for it — the two cannot disagree because they came from the same call

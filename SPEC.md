@@ -145,7 +145,7 @@ T6 |x|PWA shell — manifest, service worker, tokens, installable|C3,C25,C26,C38
 T6.5|x|terraform: HTTP API (v2) + Lambda + Cognito JWT authorizer → §I `api`. code via `archive_file` — CI takes over @ T20 (§C34). ⊥ handlers, ⊥ routes' bodies — T7 owns those|C27,C42,C4,T5,V10
 T6.6|x|terraform: S3 + CloudFront static hosting ∀ PWA → §I `pwa`. default cloudfront domain ∴ ⊥ ACM, ⊥ domain. + CORS on §I `api` w/ the real origin. custom domain + ACM = later|C26,C42,C3,T6,T6.5
 T7 |x|entry CRUD ui — 3 split input modes|C23,V11,V12
-T8 |~|balance view + drilldown|C7,V3
+T8 |x|balance view + drilldown|C7,V3
 T8.5|.|member admin — active toggle + write-off action. admin-only. ! named test ∀ V10: non-admin session → 403 ∀ both routes. 1st + only admin surface ∴ ⊥ fold → T7|C48,C50,V10,T7
 T9 |.|`notifications.py` — `send()` via `pywebpush`|C9,C31
 T10|.|push subscribe flow, button-gated after value|C17,V6
@@ -153,6 +153,7 @@ T11|.|notify ∀ entry create, via stream|C10,C29
 T12|.|manual nudge|C10
 T13|.|sub lifecycle — re-subscribe @ launch, 410 handling. + request Storage API persistent mode @ same startup path (C16)|C15,C16,V7
 T14|.|delivery receipt ping + rate view|C19,V9
+T14.5|.|nav restructure — 3 tabs: dashboard (opens here) / add cost / history. bottom bar, ! safe-area-inset-bottom ∀ home indicator. ? router ⊥ useState — back gesture ∈ installed PWA, decide @ build. ∀ new text pair ! clears V13. ⊥ before T7+T8 — restructures what they built|C3,C25,C38,C39,V13,T7,T8
 T15|.|onboarding — Add to Home Screen walkthrough|C18
 T16|.|SHIP to house. wk8 clock starts|C1
 T17|.|recurring bill defs + scheduled post w/ idempotency key|C8,C30,V2
