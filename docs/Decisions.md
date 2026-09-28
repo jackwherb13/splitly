@@ -2,6 +2,15 @@
 
 Source of truth. Vault note `MyNotes/Projects/Splitly/Decisions.md` is an at-a-glance index pointing here.
 
+## T9 notifications — 2026-09-28
+
+- **§C9 taken literally: one module, one `send()`, no seam.** No Protocol, no adapter, no registry. SMS was costed at §R8 and deferred, so there is exactly one implementation and nothing to select between. `test_module_exposes_send_and_no_selection_wiring` asserts the absence, because the temptation to add a `Notifier` interface is strongest before a second case exists — which is precisely when it would be guesswork
+- **`SubscriptionGone` is the whole reason §V7 will be possible at T13.** A 404 or 410 means the push service has forgotten the endpoint; anything else means it is having a bad day. Conflating them is expensive in both directions — retrying a dead endpoint forever, or silently unsubscribing a working device on a transient 500. Mutation-tested: treating every failure as dead fails exactly one test
+- **Config is read once per warm Lambda**, not per push, and the test counts the reads rather than trusting the comment
+- **VAPID keys are placeholders in Terraform with the values put out of band.** §C42 wants every resource born in Terraform; §C47 forbids credentials in `.tf`. Placeholder plus `ignore_changes = [value]` satisfies both *for the code* — but a refresh still reads the real value into state, and that is worth saying plainly rather than implying the exposure is absent. The mitigation is that the state bucket is private, versioned, encrypted and reachable only through an MFA-gated role or CI. **The alternative** — not managing the private key in Terraform at all, treating it as data like the DynamoDB seeds — keeps the secret out of state entirely at the cost of a resource T20's sweep would flag. Jackson's call; the §C42-respecting option was chosen because he has twice rejected carving exemptions out of it
+- **`kms:Decrypt` is scoped with `kms:ViaService`**, so the role can decrypt through SSM and nowhere else
+- **A landmine named before it goes off:** `pywebpush` is not in the Lambda runtime and the zip is `api/src` alone, so the moment anything imports `notifications` the function breaks *at import time* — before any handler runs, so every route would 500 at once. Nothing imports it yet. **T11's row now carries the packaging requirement** rather than a comment, which is B5 and B6's lesson applied before the fact for once
+
 ## T8.5 member admin — and B6, an authorization bypass that had shipped — 2026-09-28
 
 - **Verified on the phone, 2026-09-28.** Admin section visible to the admin session only; marking a member as left removed them from the split options while their balance stayed in “Who owes who”; a write-off zeroed the debt with the original expense still on the ledger beside it
