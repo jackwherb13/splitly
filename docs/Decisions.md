@@ -4,6 +4,7 @@ Source of truth. Vault note `MyNotes/Projects/Splitly/Decisions.md` is an at-a-g
 
 ## T7 part 2 — the UI — 2026-09-22
 
+- **Verified on a real iPhone, 2026-09-28** — installed PWA → Cognito email OTP → CloudFront → API Gateway → Lambda → DynamoDB, all three split modes. That is the first time the whole chain has run end to end on the device the spec was written for (§C3, house 100% iOS), and it is what closes T7 — not the test suite, which cannot see any of those hops
 - **The UI does not split anything.** It sends the mode and the members; the server owns §C24's remainder rule. Duplicating the maths in JavaScript would mean two implementations of §V12 and a drift that silently loses cents. `test_never_computes_shares_itself` asserts the request body carries no `shares` and no `amounts` in even mode — a negative test, because the failure mode is code appearing where it should not
 - **Manual mode is the one exception, and only for a running total.** The caller is typing the numbers, so the form shows what is left to allocate. That is a sum, not a split
 - **Money is parsed with `Math.round`, never `Math.trunc`.** `19.99 * 100` is `1998.9999…` in binary floating point; truncating loses a cent on ordinary prices. Mutation-tested: swapping to `trunc` fails with *expected 1998 to be 1999*
