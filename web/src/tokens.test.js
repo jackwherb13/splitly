@@ -31,6 +31,8 @@ const BODY_TEXT_PAIRS = [
   ['ink', 'surface'],
   ['muted', 'surface'],
   ['on-accent', 'accent'],
+  // §T14.5 — the Nudge button, the active tab and the title.
+  ['accent', 'surface'],
 ]
 
 describe('§V13 — body text clears WCAG AAA', () => {

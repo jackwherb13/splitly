@@ -15,21 +15,29 @@ body {
 }
 
 header {
-  background: var(--accent);
-  color: var(--on-accent);
   /* Home-screen web apps run under the notch. */
-  padding: calc(1rem + env(safe-area-inset-top)) 1rem 1rem;
+  padding: calc(1rem + env(safe-area-inset-top)) 1.25rem 0.5rem;
 }
 
 header h1 {
   margin: 0;
-  font-size: 1.25rem;
-  letter-spacing: 0.02em;
+  font-size: 1.375rem;
+  color: var(--accent);
+}
+
+header a.icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  color: var(--muted);
 }
 
 main {
-  padding: 1rem;
-  border-top: 1px solid var(--rule);
+  padding: 0.5rem 1.25rem;
+  /* Clear the fixed bottom bar and the home indicator under it. */
+  padding-bottom: calc(6rem + env(safe-area-inset-bottom));
 }
 
 .muted {
@@ -82,14 +90,6 @@ button {
 
 button:disabled {
   opacity: 0.5;
-}
-
-button.link {
-  margin: 0;
-  padding: 0;
-  color: var(--on-accent);
-  background: none;
-  text-decoration: underline;
 }
 
 .signin {
@@ -217,4 +217,82 @@ h3 {
 
 .entries .row button.mode {
   margin: 0;
+}
+
+/* --- §T14.5 layout 4 --------------------------------------------------- */
+
+.balance-card {
+  margin: 0.5rem 0 1.5rem;
+  padding: 1.25rem;
+  border-radius: 16px;
+  background: var(--accent);
+  color: var(--on-accent);
+}
+
+.balance-card .amount {
+  font-size: 2.75rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  line-height: 1.2;
+}
+
+.eyebrow {
+  margin: 0 0 0.5rem;
+  font-size: 0.8125rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+button.secondary {
+  color: var(--accent);
+  background: none;
+  border: 1px solid var(--accent);
+}
+
+.navbar {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 0.75rem calc(0.5rem + env(safe-area-inset-bottom));
+  background: var(--surface);
+  border-top: 1px solid var(--rule);
+}
+
+.navbar a {
+  text-decoration: none;
+}
+
+.navbar .tab {
+  width: 4.5rem;
+  min-height: 49px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.6875rem;
+  color: var(--muted);
+}
+
+.navbar .tab[aria-current='page'] {
+  color: var(--accent);
+  font-weight: 700;
+}
+
+.navbar .add {
+  flex-grow: 1;
+  min-height: 48px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  border-radius: 24px;
+  background: var(--accent);
+  color: var(--on-accent);
+  font-weight: 700;
 }

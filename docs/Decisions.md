@@ -2,6 +2,18 @@
 
 Source of truth. Vault note `MyNotes/Projects/Splitly/Decisions.md` is an at-a-glance index pointing here.
 
+## T14.5 tabbed navigation (layout 4) — 2026-09-29
+
+- **Designed on a canvas before any code** (https://claude.ai/artifact/8x3oGLgnBiKPa8genURXc1): five whole-screen options, then B's green balance card + A's plain list combined, then five bottom bars on that body. Jackson picked **4 · Wide Add in the bar** — Home · a wide, labelled "Add expense" · History — the only bar where the most frequent action is both the largest control and labelled in words
+- **Notifications moved to Settings — Jackson's call, with a known cost.** Push is how the app chases (§G); a toggle behind a settings icon is found by fewer people than one on Home. Mitigation owed at T15: onboarding walks each housemate through turning it on. §C17 still holds — the control stays hidden until the ledger has an entry
+- **Tabs live in the URL hash** (`#/`, `#/add`, `#/history`, `#/settings`), no router library. The iOS back swipe moves between tabs and T13's Reload lands on the same tab
+- **After saving an expense the app goes to Home**, where the balance just changed
+- **History shows names and dates, newest first.** The old ledger list printed raw member ids ("jackson paid · gabe $5.00") — a bug fixed by the move
+- **The Home card is your own balance, in words** — "You're owed / You owe / You're settled up" — never a coloured sign (§C40). "by N people" counts debtors, not rows
+- **The delivery view now refreshes every time Settings opens**, fixing T14's stale-until-restart numbers, because Settings unmounts between visits
+- **V13:** accent text on surface (Nudge button, active tab, title) is a new body-text pair and was added to the contrast test — it clears 7:1
+- **Caught before commit:** `History.jsx` beside a `history.js` helper is exactly B5's case-colliding import (§V17b). Helper renamed `historyRows.js`
+
 ## T14 delivery receipts + rate view — 2026-09-29
 
 - **`/review` returned NO-GO on one BLOCK: the service worker cannot authenticate.** The token is in `localStorage`, which a worker cannot read; and copying it somewhere readable would not help, because it lasts an hour and pushes arrive days after the app was last opened. Receipts would fail precisely on idle phones — biasing the measurement against the case §C19 exists for

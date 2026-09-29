@@ -3,16 +3,17 @@ import { useCallback, useEffect, useState } from 'react'
 import './app.css'
 import { createEntry, listBalances, listEntries, listMembers, whoami } from './api'
 import { getToken, signOut } from './auth'
-import Admin from './Admin'
-import Balances from './Balances'
-import EnablePush from './EnablePush'
 import EntryForm from './EntryForm'
 import { splittable } from './entryBody'
+import History from './History'
+import Home from './Home'
 import { onLaunch } from './launch'
+import NavBar from './NavBar'
+import { go, hrefFor, useTab } from './route'
+import Settings from './Settings'
 import SignIn from './SignIn'
 import { watchForUpdates } from './update'
 
-const money = (cents) => (cents / 100).toFixed(2)
 
 export default function App() {
   const [token, setToken] = useState(getToken())
@@ -21,6 +22,7 @@ export default function App() {
   const [balances, setBalances] = useState([])
   const [session, setSession] = useState(null)
   const [reload, setReload] = useState(null)
+  const tab = useTab()
   const [error, setError] = useState(null)
 
   const refresh = useCallback(async () => {
@@ -59,6 +61,8 @@ export default function App() {
   async function add(body) {
     await createEntry(body)
     await refresh()
+    // §T14.5 — straight to Home, where the balance just changed.
+    go('home')
   }
 
   if (!token) return <SignIn onSignedIn={setToken} />
@@ -75,66 +79,45 @@ export default function App() {
       )}
       <header>
         <h1>Splitly</h1>
-        <button
-          type="button"
-          className="link"
-          onClick={() => {
-            signOut()
-            setToken(null)
-          }}
-        >
-          Sign out
-        </button>
+        <a href={hrefFor('settings')} className="icon" aria-label="Settings">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" aria-hidden="true">
+            <path d="M4 21v-7M4 10V3M12 21v-9M12 8V3M20 21v-5M20 12V3M1 14h6M9 8h6M17 16h6" />
+          </svg>
+        </a>
       </header>
 
       <main>
         {error && <p className="error">{error}</p>}
 
-        <section>
-          <h2>Who owes who</h2>
-          <Balances
-            balances={balances}
+        {tab === 'home' && (
+          <Home balances={balances} entries={entries} members={members} me={session?.member_id} />
+        )}
+
+        {tab === 'add' &&
+          (members.length === 0 ? (
+            <p className="muted">No members in this house yet.</p>
+          ) : (
+            <EntryForm members={splittable(members)} onCreated={add} />
+          ))}
+
+        {tab === 'history' && <History entries={entries} members={members} />}
+
+        {tab === 'settings' && (
+          <Settings
             entries={entries}
             members={members}
-            me={session?.member_id}
+            balances={balances}
+            session={session}
+            onChanged={refresh}
+            onSignOut={() => {
+              signOut()
+              setToken(null)
+            }}
           />
-        </section>
-
-        {/* §C17 — only once the ledger has shown something worth being
-            notified about. Never on load. */}
-        {entries.length > 0 && <EnablePush />}
-
-        {members.length === 0 ? (
-          <p className="muted">No members in this house yet. Member admin arrives with T8.5.</p>
-        ) : (
-          <EntryForm members={splittable(members)} onCreated={add} />
-        )}
-
-        <section>
-          <h2>Ledger</h2>
-          {entries.length === 0 && <p className="muted">Nothing yet.</p>}
-          <ul className="entries">
-            {entries.map((entry) => (
-              <li key={entry.entry_id}>
-                <div className="row">
-                  <span>{entry.description}</span>
-                  <strong>{money(entry.total)}</strong>
-                </div>
-                <div className="muted small">
-                  {entry.payer} paid &middot;{' '}
-                  {Object.entries(entry.shares)
-                    .map(([who, cents]) => `${who} ${money(cents)}`)
-                    .join(' · ')}
-                </div>
-              </li>
-            ))}
-          </ul>
-        </section>
-
-        {session?.admin && (
-          <Admin members={members} balances={balances} onChanged={refresh} />
         )}
       </main>
+
+      <NavBar tab={tab} />
     </>
   )
 }
