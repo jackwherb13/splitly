@@ -109,6 +109,7 @@ def test_store_exposes_no_mutation_path(store):
         "list_members",
         "put_user_house",
         "add_member",
+        "claim_nudge",
         "membership",
         "put_push_subscription",
         "list_push_subscriptions",
@@ -281,4 +282,35 @@ def test_v20_neither_write_lands_without_the_other(store):
     with pytest.raises(AlreadyExists):
         store.add_member("h1", Member(member_id="new", name="New"), user_id="sub-taken")
 
+    assert store.list_members("h1") == []
+
+
+# --- nudges (§T12, §V25) --------------------------------------------------
+
+NOON = datetime(2026, 9, 29, 12, 0, tzinfo=UTC)
+
+
+def test_v25_a_debtor_can_be_nudged_once_an_hour(store):
+    from datetime import timedelta
+
+    assert store.claim_nudge("h1", "dan", by="jackson", now=NOON) is True
+    assert store.claim_nudge("h1", "dan", by="jackson", now=NOON + timedelta(minutes=59)) is False
+    assert store.claim_nudge("h1", "dan", by="jackson", now=NOON + timedelta(minutes=61)) is True
+
+
+def test_v25_the_hour_is_house_wide_not_per_nudger(store):
+    """Three housemates must not be able to buzz one person three times."""
+    assert store.claim_nudge("h1", "dan", by="jackson", now=NOON) is True
+    assert store.claim_nudge("h1", "dan", by="gabe", now=NOON) is False
+
+
+def test_v25_each_debtor_has_their_own_hour(store):
+    assert store.claim_nudge("h1", "dan", by="jackson", now=NOON) is True
+    assert store.claim_nudge("h1", "alice", by="jackson", now=NOON) is True
+
+
+def test_a_claim_leaves_the_ledger_alone(store):
+    """Nudges share the house partition; they must not read as entries."""
+    store.claim_nudge("h1", "dan", by="jackson", now=NOON)
+    assert store.list_entries("h1") == []
     assert store.list_members("h1") == []

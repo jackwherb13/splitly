@@ -79,6 +79,10 @@ class Conflict(Exception):
     """The thing being created already exists (§V20)."""
 
 
+class TooSoon(Exception):
+    """This debtor was nudged within the hour (§V25)."""
+
+
 def _claims(event):
     try:
         return event["requestContext"]["authorizer"]["jwt"]["claims"]
@@ -279,6 +283,55 @@ def create_member(event):
     return _json(201, {"member_id": member_id, "name": name, "active": True})
 
 
+def create_nudge(event):
+    """§T12 — someone the house owes chases someone who owes it.
+
+    §V24 is checked here from derived balances, never from what the UI chose
+    to show. Balances are net against the house, so the message says so.
+    `notifications` is imported here, not at the top: pywebpush comes from a
+    layer, and a broken layer should cost this route, not every route.
+    """
+    from splitly import notifications
+
+    who = _membership(event)
+    target = _body(event).get("member_id")
+    store = _get_store()
+
+    net = balances(store.list_entries(who.house_id))
+    if net.get(who.member_id, 0) <= 0:
+        raise Forbidden("only someone the house owes can nudge")
+    owes = -net.get(target, 0)
+    if owes <= 0:
+        raise BadRequest("they don't owe the house anything")
+
+    subscriptions = [
+        found["subscription"]
+        for found in store.list_push_subscriptions(who.house_id)
+        if found["member_id"] == target
+    ]
+    # Checked before the hour is claimed: nothing sent, nothing used up.
+    if not subscriptions:
+        raise Conflict("they haven't turned on notifications")
+    if not store.claim_nudge(who.house_id, target, by=who.member_id, now=datetime.now(UTC)):
+        raise TooSoon("already nudged in the last hour")
+
+    names = {m.member_id: m.name for m in store.list_members(who.house_id)}
+    payload = {
+        "title": f"{names.get(who.member_id, who.member_id)} nudged you",
+        "body": f"You owe the house ${owes // 100}.{owes % 100:02d}",
+    }
+    sent = 0
+    for subscription in subscriptions:
+        try:
+            notifications.send(subscription, payload)
+            sent += 1
+        except notifications.SubscriptionGone:
+            notifications.report_failure("gone", target)
+        except Exception:
+            notifications.report_failure("error", target)
+    return _json(201, {"sent": sent})
+
+
 def create_subscription(event):
     """§C15, §T10 — store the browser's PushSubscription against this session.
 
@@ -343,6 +396,7 @@ ROUTES = {
     "GET /members": (list_members, SESSION),
     "GET /balances": (list_balances, SESSION),
     "POST /subscriptions": (create_subscription, SESSION),
+    "POST /nudges": (create_nudge, SESSION),
     "PUT /members/{member_id}": (set_member_active, ADMIN),
     "POST /members": (create_member, ADMIN),
     "POST /write-offs": (create_write_off, ADMIN),
@@ -369,9 +423,11 @@ def handle(event, context):
         return _json(401, {"error": "unauthenticated"})
     except NoHouse:
         return _json(403, {"error": "not a member of any house"})
-    except Forbidden:
-        return _json(403, {"error": "admin only"})
+    except Forbidden as exc:
+        return _json(403, {"error": str(exc)})
     except Conflict as exc:
         return _json(409, {"error": str(exc)})
+    except TooSoon as exc:
+        return _json(429, {"error": str(exc)})
     except (BadRequest, ValueError, KeyError) as exc:
         return _json(400, {"error": str(exc)})

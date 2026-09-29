@@ -134,6 +134,8 @@ V20: member create ⊥ overwrite. `MEMBER#` + `USER#` writes on create condition
 V21: silent refresh → replay only on 401. `POST /entries` ⊥ idempotent (handler `_write` uuid4) ∴ replaying a request that landed = duplicate entry. 401 = JWT authorizer refused before Lambda ran ∴ safe. network err|5xx ⊥ replayed
 V22: sign-out clears ∀ credential — id token + refresh token. `auth.js` `signOut` removes id token only ∴ w/ a 30d refresh token, sign out → reload = silently signed back in
 V23: handler `ROUTES` keys ∪ {`GET /me`} ⊍ `infra/api.tf` route_keys → identical sets. T10 "Load failed" = route absent @ the gateway; ⊥ check compared them
+V24: nudge ! nudger balance > 0 ∧ target balance < 0 — enforced server-side from derived balances, ⊥ trust UI. balances net vs house, ⊥ pairwise (`ledger.py` `balances()`) ∴ message says "the house", ⊥ "me"
+V25: ≤1 nudge per debtor per rolling hour, house-wide (⊥ per nudger). 1 conditional write, ⊥ read-then-write ∴ 2 simultaneous nudges → exactly 1 sent
 ```
 
 ## §T
@@ -158,7 +160,7 @@ T10|x|push subscribe flow, button-gated after value|C17,V6
 T11|x|notify ∀ entry create, via stream. ! solve lambda dep packaging 1st — `pywebpush` ∉ the runtime + the zip = `api/src` alone ∴ importing `notifications` breaks the fn @ import time|C10,C29,T9
 T11.5|x|add member — admin-only `POST /members` {name, email}. 1 act → Cognito AdminCreateUser (SUPPRESS, email_verified) + `MEMBER#<id>` + `USER#<sub>`→HOUSE link (admin=false). admin UI form. role gets `cognito-idp:AdminCreateUser` on the pool only. closes bootstrap gap T8.5 ⊥ closed — Gabe added by hand 2026-09-28. ! named test ∀ V10: non-admin → 403|C4,C20,C48,C51,V10,V19,V20,V23
 T11.6|x|sign-in simpler after 1st — (a) keep 30d refresh token, renew id token silently (REFRESH_TOKEN_AUTH) on expiry|401; refresh fails → sign-in screen. refresh token ∈ localStorage accepted under C20 (b) prefill last-used email. today only 1h id token kept ∴ email OTP every hour. passkeys considered + declined 2026-09-29|C4,C20,V19,V21,V22
-T12|.|manual nudge|C10
+T12|x|manual nudge — `POST /nudges` {member_id}. nudger balance > 0, target balance < 0. ≤1 per debtor per hour, house-wide. push = "X nudged you — you owe the house $Y". target ⊥ subscription → 409, hour slot ⊥ consumed. nudge time stored ∴ T19 can reset the reminder cap (C11). decided 2026-09-29|C10,C11,C20,V24,V25
 T13|.|sub lifecycle — re-subscribe @ launch, 410 handling. + request Storage API persistent mode @ same startup path (C16)|C15,C16,V7
 T14|.|delivery receipt ping + rate view|C19,V9
 T14.5|.|nav restructure — 3 tabs: dashboard (opens here) / add cost / history. bottom bar, ! safe-area-inset-bottom ∀ home indicator. ? router ⊥ useState — back gesture ∈ installed PWA, decide @ build. ∀ new text pair ! clears V13. ⊥ before T7+T8 — restructures what they built|C3,C25,C38,C39,V13,T7,T8

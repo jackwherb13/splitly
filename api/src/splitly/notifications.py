@@ -15,7 +15,9 @@ second would silently unsubscribe a working device.
 """
 
 import json
+import logging
 import os
+import time
 from dataclasses import dataclass
 
 import boto3
@@ -29,6 +31,8 @@ SUBJECT_PARAM = "/splitly/vapid/subject"
 DEAD_STATUSES = frozenset({404, 410})
 
 _config_cache = None
+
+log = logging.getLogger(__name__)
 
 
 class SubscriptionGone(Exception):
@@ -76,3 +80,21 @@ def send(subscription, payload):
         if status in DEAD_STATUSES:
             raise SubscriptionGone(subscription.get("endpoint")) from exc
         raise
+
+
+def report_failure(reason, member):
+    """Never raised by callers (§V7), never quiet: ERROR + a metric for T21."""
+    log.error("push to %s failed (%s); not retried", member, reason, exc_info=True)
+    # CloudWatch Embedded Metric Format: a log line Lambda turns into a metric.
+    print(json.dumps({
+        "_aws": {
+            "Timestamp": int(time.time() * 1000),
+            "CloudWatchMetrics": [{
+                "Namespace": "Splitly",
+                "Dimensions": [["Reason"]],
+                "Metrics": [{"Name": "PushSendFailed", "Unit": "Count"}],
+            }],
+        },
+        "Reason": reason,
+        "PushSendFailed": 1,
+    }))

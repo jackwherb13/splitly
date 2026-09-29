@@ -13,19 +13,13 @@ batch — every live subscription notified twice, and a dead one retried, which
 §V7 forbids. Marking dead subscriptions is T13's job.
 """
 
-import json
-import logging
 import os
-import time
 
 import boto3
 from boto3.dynamodb.types import TypeDeserializer
 
-from splitly.notifications import SubscriptionGone, send
+from splitly.notifications import SubscriptionGone, report_failure, send
 from splitly.store import Store
-
-log = logging.getLogger(__name__)
-log.setLevel(logging.INFO)
 
 _store = None
 
@@ -37,23 +31,6 @@ def _get_store():
         table = boto3.resource("dynamodb").Table(os.environ["SPLITLY_TABLE"])
         _store = Store(table)
     return _store
-
-
-def _failed(reason, member):
-    log.error("push to %s failed (%s); not retried", member, reason, exc_info=True)
-    # CloudWatch Embedded Metric Format: a log line Lambda turns into a metric.
-    print(json.dumps({
-        "_aws": {
-            "Timestamp": int(time.time() * 1000),
-            "CloudWatchMetrics": [{
-                "Namespace": "Splitly",
-                "Dimensions": [["Reason"]],
-                "Metrics": [{"Name": "PushSendFailed", "Unit": "Count"}],
-            }],
-        },
-        "Reason": reason,
-        "PushSendFailed": 1,
-    }))
 
 
 def _dollars(cents):
@@ -94,9 +71,9 @@ def _notify(image):
         try:
             send(found["subscription"], payload)
         except SubscriptionGone:
-            _failed("gone", member)
+            report_failure("gone", member)
         except Exception:
-            _failed("error", member)
+            report_failure("error", member)
 
 
 def handle(event, _context):

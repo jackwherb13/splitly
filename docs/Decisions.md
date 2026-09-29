@@ -2,6 +2,17 @@
 
 Source of truth. Vault note `MyNotes/Projects/Splitly/Decisions.md` is an at-a-glance index pointing here.
 
+## T12 manual nudge — 2026-09-29
+
+- **Jackson's calls:** only someone the house owes can nudge (the person out of pocket chases — §G); only someone who owes can be nudged; **at most once an hour per debtor, house-wide**, so three housemates cannot triple-buzz one person. §V24, §V25
+- **The message says "you owe the house $X", not "you owe me".** Balances are net against the house (`ledger.py` `balances()`); there is no person-to-person debt in the data to name
+- **The hour is one conditional write** (`attribute_not_exists OR sent_at <= cutoff`), not read-then-write, so two taps at the same instant send exactly one push. The record stays in the table — T19 needs it, because §C11 says a manual nudge resets the reminder cap
+- **A debtor with no subscription is a 409 and does not use up the hour**, checked before the claim: nothing could be delivered, so nothing should be spent
+- **`notifications` is imported inside the nudge route only.** The API function now carries the pywebpush layer; a top-level import would make a broken layer take down every route (T9's landmine), this way it costs one
+- **Loud-failure reporting moved from `stream.py` to `notifications.report_failure`** so the stream and the nudge report identically — same ERROR log, same `PushSendFailed` metric for T21
+- **403 messages now carry their reason.** The router hard-coded "admin only" for every `Forbidden`; the nudge's refusal is not about admin
+- **Mutation-tested:** dropping the nudger check fails exactly §V24's test; dropping the conditional fails exactly §V25's three
+
 ## T11.5 add member + T11.6 stay signed in — 2026-09-29
 
 - **`/review` ran first and returned NO-GO: 2 BLOCK, 4 HARDEN**, all now §V20–V23. The two BLOCKs were the same root: `put_member` and `put_user_house` overwrite. A second "Dan" would have inherited the first Dan's balance; re-adding an existing email would have moved a real login between houses

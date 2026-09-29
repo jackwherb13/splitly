@@ -73,7 +73,12 @@ export default function App() {
 
         <section>
           <h2>Who owes who</h2>
-          <Balances balances={balances} entries={entries} members={members} />
+          <Balances
+            balances={balances}
+            entries={entries}
+            members={members}
+            me={session?.member_id}
+          />
         </section>
 
         {/* §C17 — only once the ledger has shown something worth being

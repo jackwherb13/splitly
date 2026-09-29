@@ -9,6 +9,7 @@ authorizer — §V10's own text is `⊥ forgotten`.
 
 import json
 import os
+from datetime import UTC, datetime
 
 import boto3
 import pytest
@@ -16,6 +17,7 @@ from moto import mock_aws
 
 from splitly import handler
 from splitly.handler import ADMIN, ROUTES, SESSION, Unauthenticated, handle, me
+from splitly.ledger import Member
 from splitly.store import Store
 
 
@@ -533,3 +535,102 @@ def test_v23_every_route_the_handler_serves_exists_at_the_gateway():
     gateway = set(re.findall(r'route_key\s*=\s*"([^"]+)"', api_tf))
 
     assert gateway == set(ROUTES) | {"GET /me"}
+
+
+# --- manual nudge (§T12, §V24, §V25) --------------------------------------
+
+DAN_SUB = "cognito-dan"
+
+
+@pytest.fixture
+def owed(store, monkeypatch):
+    """Jackson fronted groceries; Dan owes the house. Dan's phone is subscribed."""
+    from splitly import notifications
+
+    store.put_member("h1", Member(member_id="jackson", name="Jackson"))
+    store.put_member("h1", Member(member_id="dan", name="Dan"))
+    store.put_user_house(DAN_SUB, "h1", member_id="dan")
+    handle(request("POST /entries", body={
+        "description": "groceries", "kind": "expense", "total": 2000, "payer": "jackson",
+        "mode": "all_to_one", "member": "dan",
+    }), None)
+    store.put_push_subscription("h1", "dan", {"endpoint": "https://push.example.com/dan"})
+
+    sent = []
+    monkeypatch.setattr(notifications, "send", lambda sub, payload: sent.append((sub, payload)))
+    return sent
+
+
+def nudge(member_id, sub=SUB):
+    return handle(request("POST /nudges", body={"member_id": member_id}, sub=sub), None)
+
+
+def test_someone_owed_money_can_nudge_a_debtor(store, owed):
+    response = nudge("dan")
+
+    assert response["statusCode"] == 201
+    ((subscription, payload),) = owed
+    assert subscription["endpoint"] == "https://push.example.com/dan"
+
+
+def test_the_nudge_says_the_house_not_me(store, owed):
+    """§V24 — balances are net against the house, not person to person."""
+    nudge("dan")
+
+    ((_, payload),) = owed
+    assert "Jackson" in payload["title"]
+    assert "the house" in payload["body"]
+    assert "$20.00" in payload["body"]
+
+
+def test_v24_someone_not_owed_money_cannot_nudge(store, owed):
+    """Dan owes; he does not get to chase anyone."""
+    store.put_member("h1", Member(member_id="alice", name="Alice"))
+
+    assert nudge("jackson", sub=DAN_SUB)["statusCode"] == 403
+    assert owed == []
+
+
+def test_v24_someone_not_in_debt_cannot_be_nudged(store, owed):
+    assert nudge("jackson")["statusCode"] == 400
+    assert owed == []
+
+
+def test_v25_a_second_nudge_within_the_hour_is_refused(store, owed):
+    nudge("dan")
+
+    response = nudge("dan")
+
+    assert response["statusCode"] == 429
+    assert len(owed) == 1
+
+
+def test_a_debtor_without_notifications_is_a_conflict_and_keeps_the_hour_free(store, owed):
+    """Nothing could be delivered, so nothing should be used up."""
+    store.put_member("h1", Member(member_id="eve", name="Eve"))
+    handle(request("POST /entries", body={
+        "description": "rent", "kind": "expense", "total": 500, "payer": "jackson",
+        "mode": "all_to_one", "member": "eve",
+    }), None)
+
+    assert nudge("eve")["statusCode"] == 409
+    assert store.claim_nudge("h1", "eve", by="x", now=datetime.now(UTC)) is True
+
+
+@pytest.mark.parametrize("failure", ["gone", "error"])
+def test_a_failed_nudge_push_is_reported_not_raised(store, owed, monkeypatch, capsys, failure):
+    """§V7 — a dead subscription is not retried, and nothing fails silently."""
+    from splitly import notifications
+
+    def broken(subscription, payload):
+        if failure == "gone":
+            raise notifications.SubscriptionGone("gone")
+        raise RuntimeError("push service 500")
+
+    monkeypatch.setattr(notifications, "send", broken)
+
+    response = nudge("dan")
+
+    assert response["statusCode"] == 201
+    assert json.loads(response["body"])["sent"] == 0
+    assert "PushSendFailed" in capsys.readouterr().out

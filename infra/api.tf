@@ -76,6 +76,7 @@ resource "aws_lambda_function" "api" {
   handler          = "splitly.handler.handle"
   filename         = data.archive_file.api.output_path
   source_code_hash = data.archive_file.api.output_base64sha256
+  layers           = [aws_lambda_layer_version.deps.arn] # pywebpush, for the nudge route (T12)
   timeout          = 10
   memory_size      = 256
 
@@ -176,6 +177,14 @@ resource "aws_apigatewayv2_route" "member_set_active" {
 resource "aws_apigatewayv2_route" "member_create" {
   api_id             = aws_apigatewayv2_api.main.id
   route_key          = "POST /members"
+  target             = "integrations/${aws_apigatewayv2_integration.api.id}"
+  authorization_type = "JWT"
+  authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
+}
+
+resource "aws_apigatewayv2_route" "nudge_create" {
+  api_id             = aws_apigatewayv2_api.main.id
+  route_key          = "POST /nudges"
   target             = "integrations/${aws_apigatewayv2_integration.api.id}"
   authorization_type = "JWT"
   authorizer_id      = aws_apigatewayv2_authorizer.cognito.id

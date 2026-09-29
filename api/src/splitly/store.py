@@ -22,7 +22,7 @@ stopping at the first page returned a silent prefix of the ledger — see B3.
 """
 
 import hashlib
-from datetime import datetime
+from datetime import datetime, timedelta
 from decimal import Decimal
 
 from boto3.dynamodb.conditions import Key
@@ -188,6 +188,34 @@ class Store:
             {"member_id": item["member_id"], "subscription": item["subscription"]}
             for item in self._query(house_id, "PUSHSUB#")
         ]
+
+    # --- nudges (§T12) ----------------------------------------------
+
+    def claim_nudge(self, house_id: str, member_id: str, by: str, now: datetime) -> bool:
+        """§V25 — take this debtor's hour, or learn it is taken.
+
+        One conditional write, so two nudges at the same instant cannot both
+        win. The record stays for T19, where a nudge resets the reminder cap
+        (§C11). Timestamps are UTC ISO strings, which order as text.
+        """
+        cutoff = (now - timedelta(hours=1)).isoformat()
+        try:
+            self._table.put_item(
+                Item={
+                    "pk": f"HOUSE#{house_id}",
+                    "sk": f"NUDGE#{member_id}",
+                    "member_id": member_id,
+                    "by": by,
+                    "sent_at": now.isoformat(),
+                },
+                ConditionExpression="attribute_not_exists(pk) OR sent_at <= :cutoff",
+                ExpressionAttributeValues={":cutoff": cutoff},
+            )
+        except ClientError as exc:
+            if exc.response["Error"]["Code"] == "ConditionalCheckFailedException":
+                return False
+            raise
+        return True
 
     # --- internals ---------------------------------------------------
 
