@@ -110,6 +110,9 @@ def test_store_exposes_no_mutation_path(store):
         "put_user_house",
         "add_member",
         "claim_nudge",
+        "record_push",
+        "receive_push",
+        "list_pushes",
         "membership",
         "put_push_subscription",
         "retire_push_subscription",
@@ -368,3 +371,63 @@ def test_retiring_one_device_leaves_the_others(store):
     store.retire_push_subscription("h1", "dan", PHONE["endpoint"], now=NOON)
 
     assert [s["subscription"] for s in store.list_push_subscriptions("h1")] == [laptop]
+
+
+# --- delivery receipts (§T14, §V27, §V28, §V29) ----------------------------
+
+
+def test_v29_a_sent_push_is_recorded_and_listed(store):
+    store.record_push("h1", "p1", member_id="dan", kind="entry", now=NOON)
+
+    (push,) = store.list_pushes("h1", since=NOON)
+    assert (push["push_id"], push["member_id"], push["kind"]) == ("p1", "dan", "entry")
+    assert push.get("delivered_at") is None
+
+
+def test_v28_a_receipt_marks_its_push_delivered(store):
+    from datetime import timedelta
+
+    store.record_push("h1", "p1", member_id="dan", kind="entry", now=NOON)
+
+    assert store.receive_push("h1", "p1", now=NOON + timedelta(seconds=3)) is True
+    (push,) = store.list_pushes("h1", since=NOON)
+    assert push["delivered_at"] == (NOON + timedelta(seconds=3)).isoformat()
+    assert push["member_id"] == "dan"
+
+
+def test_v28_an_unknown_push_id_creates_nothing(store):
+    """The route is public; a guessed or forged id must not write."""
+    assert store.receive_push("h1", "made-up", now=NOON) is False
+    assert store._table.scan()["Items"] == []
+
+
+def test_v28_a_second_receipt_changes_nothing(store):
+    from datetime import timedelta
+
+    store.record_push("h1", "p1", member_id="dan", kind="entry", now=NOON)
+    store.receive_push("h1", "p1", now=NOON + timedelta(seconds=3))
+
+    assert store.receive_push("h1", "p1", now=NOON + timedelta(hours=1)) is False
+    (push,) = store.list_pushes("h1", since=NOON)
+    assert push["delivered_at"] == (NOON + timedelta(seconds=3)).isoformat()
+
+
+def test_v27_push_records_never_collide_with_the_ledger_or_subscriptions(store):
+    store.put_entry(make_entry(entry_id="p1", house_id="h1"))
+    store.put_push_subscription("h1", "dan", PHONE)
+    store.record_push("h1", "p1", member_id="dan", kind="entry", now=NOON)
+
+    assert [e.entry_id for e in store.list_entries("h1")] == ["p1"]
+    assert len(store.list_push_subscriptions("h1")) == 1
+    assert len(store.list_pushes("h1", since=NOON)) == 1
+
+
+def test_pushes_before_the_window_are_not_listed(store):
+    from datetime import timedelta
+
+    store.record_push("h1", "old", member_id="dan", kind="entry", now=NOON - timedelta(days=8))
+    store.record_push("h1", "new", member_id="dan", kind="entry", now=NOON)
+
+    assert [p["push_id"] for p in store.list_pushes("h1", since=NOON - timedelta(days=7))] == [
+        "new"
+    ]

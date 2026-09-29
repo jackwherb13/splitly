@@ -80,7 +80,8 @@ resource "aws_lambda_function" "stream" {
 
   environment {
     variables = {
-      SPLITLY_TABLE = aws_dynamodb_table.ledger.name
+      SPLITLY_TABLE       = aws_dynamodb_table.ledger.name
+      SPLITLY_RECEIPT_URL = "${aws_apigatewayv2_api.main.api_endpoint}/receipts"
     }
   }
 

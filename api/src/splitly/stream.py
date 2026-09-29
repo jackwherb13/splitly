@@ -14,6 +14,7 @@ batch — every live subscription notified twice, and a dead one retried, which
 """
 
 import os
+import uuid
 from datetime import UTC, datetime
 
 import boto3
@@ -65,10 +66,17 @@ def _notify(image):
         member = found["member_id"]
         if member not in owed:
             continue
+        push_id = str(uuid.uuid4())
         payload = {
             "title": image["description"],
             "body": _body(image["kind"], payer_name, owed[member]),
+            # §T14 — what the service worker needs to send its receipt.
+            "push_id": push_id,
+            "house_id": house_id,
+            "receipt_url": os.environ.get("SPLITLY_RECEIPT_URL"),
         }
+        # §V29 — recorded before the send, so a failure still counts.
+        store.record_push(house_id, push_id, member, "entry", now=datetime.now(UTC))
         try:
             send(found["subscription"], payload)
         except SubscriptionGone:

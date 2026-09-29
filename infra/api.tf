@@ -84,6 +84,7 @@ resource "aws_lambda_function" "api" {
     variables = {
       SPLITLY_TABLE        = aws_dynamodb_table.ledger.name
       SPLITLY_USER_POOL_ID = aws_cognito_user_pool.main.id
+      SPLITLY_RECEIPT_URL  = "${aws_apigatewayv2_api.main.api_endpoint}/receipts"
     }
   }
 
@@ -188,6 +189,23 @@ resource "aws_apigatewayv2_route" "nudge_create" {
   target             = "integrations/${aws_apigatewayv2_integration.api.id}"
   authorization_type = "JWT"
   authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
+}
+
+resource "aws_apigatewayv2_route" "deliveries_list" {
+  api_id             = aws_apigatewayv2_api.main.id
+  route_key          = "GET /deliveries"
+  target             = "integrations/${aws_apigatewayv2_integration.api.id}"
+  authorization_type = "JWT"
+  authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
+}
+
+# §V28 — the only route without the authorizer. The service worker has no
+# token; the push id in the encrypted payload is the credential instead.
+resource "aws_apigatewayv2_route" "receipt_create" {
+  api_id             = aws_apigatewayv2_api.main.id
+  route_key          = "POST /receipts"
+  target             = "integrations/${aws_apigatewayv2_integration.api.id}"
+  authorization_type = "NONE"
 }
 
 resource "aws_apigatewayv2_route" "write_off_create" {

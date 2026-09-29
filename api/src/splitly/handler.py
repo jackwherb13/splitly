@@ -21,11 +21,12 @@ import json
 import os
 import re
 import uuid
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 import boto3
 from botocore.exceptions import ClientError
 
+from splitly.delivery import summarise
 from splitly.ledger import Entry, Member, balances, drilldown
 from splitly.splits import all_to_one, even
 from splitly.store import AlreadyExists, DeadSubscription, Store
@@ -320,12 +321,18 @@ def create_nudge(event):
         raise TooSoon("already nudged in the last hour")
 
     names = {m.member_id: m.name for m in store.list_members(who.house_id)}
-    payload = {
-        "title": f"{names.get(who.member_id, who.member_id)} nudged you",
-        "body": f"You owe the house ${owes // 100}.{owes % 100:02d}",
-    }
     sent = 0
     for subscription in subscriptions:
+        push_id = str(uuid.uuid4())
+        payload = {
+            "title": f"{names.get(who.member_id, who.member_id)} nudged you",
+            "body": f"You owe the house ${owes // 100}.{owes % 100:02d}",
+            "push_id": push_id,
+            "house_id": who.house_id,
+            "receipt_url": os.environ.get("SPLITLY_RECEIPT_URL"),
+        }
+        # §V29 — recorded before the send, so a failure still counts.
+        store.record_push(who.house_id, push_id, target, "nudge", now=datetime.now(UTC))
         try:
             notifications.send(subscription, payload)
             sent += 1
@@ -337,6 +344,31 @@ def create_nudge(event):
         except Exception:
             notifications.report_failure("error", target)
     return _json(201, {"sent": sent})
+
+
+def receive_receipt(event):
+    """§T14, §V28 — the one route without a session.
+
+    The service worker has no token: it lives in localStorage, lasts an
+    hour, and pushes arrive days after the app was last opened. The push id
+    is the credential instead — random, and only ever inside the encrypted
+    payload. The house comes from that payload too: a deliberate exception to
+    §C51, safe because the store only marks an existing, unreceived push.
+    """
+    body = _body(event)
+    house_id, push_id = body.get("house_id"), body.get("push_id")
+    if not (isinstance(house_id, str) and isinstance(push_id, str)):
+        return _json(400, {"error": "house_id and push_id are required"})
+    if not _get_store().receive_push(house_id, push_id, now=datetime.now(UTC)):
+        return _json(404, {"error": "no such push, or already received"})
+    return {"statusCode": 204}
+
+
+def list_deliveries(event):
+    """§C19, §V9 — measured, not assumed. The last week, overall and per member."""
+    now = datetime.now(UTC)
+    pushes = _get_store().list_pushes(_house(event), since=now - timedelta(days=7))
+    return _json(200, summarise(pushes, now))
 
 
 def create_subscription(event):
@@ -409,6 +441,7 @@ ROUTES = {
     "POST /nudges": (create_nudge, SESSION),
     "PUT /members/{member_id}": (set_member_active, ADMIN),
     "POST /members": (create_member, ADMIN),
+    "GET /deliveries": (list_deliveries, ADMIN),
     "POST /write-offs": (create_write_off, ADMIN),
 }
 
@@ -417,6 +450,11 @@ def handle(event, context):
     route = event.get("routeKey")
     if route == "GET /me":
         return me(event, context)
+    if route == "POST /receipts":
+        try:
+            return receive_receipt(event)
+        except ValueError:
+            return _json(400, {"error": "body is not JSON"})
 
     registered = ROUTES.get(route)
     if registered is None:

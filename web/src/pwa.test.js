@@ -96,3 +96,58 @@ describe('§T13 — a new version waits for the Reload tap', () => {
     expect(sw).not.toMatch(/clientsClaim\(\)/)
   })
 })
+
+// §T14, §C19 — the device reports what it displayed. Display first: a failed
+// receipt must never cost the notification, or iOS revokes the subscription.
+describe('§T14 — the service worker sends a delivery receipt', () => {
+  function runPush(payload, fetchImpl) {
+    const listeners = {}
+    const showNotification = vi.fn(() => Promise.resolve())
+    const fetch = vi.fn(fetchImpl ?? (() => Promise.resolve({ ok: true })))
+    vi.stubGlobal('self', {
+      addEventListener: (type, fn) => (listeners[type] = fn),
+      registration: { showNotification },
+    })
+    vi.stubGlobal('fetch', fetch)
+    const source = readFileSync(
+      fileURLToPath(new URL('../public/push-sw.js', import.meta.url)),
+      'utf8',
+    )
+    new Function(source)()
+    let held
+    listeners.push({ data: { json: () => payload }, waitUntil: (p) => (held = p) })
+    return { showNotification, fetch, held: () => held }
+  }
+
+  const PAYLOAD = {
+    title: 'groceries',
+    body: 'Jackson paid',
+    push_id: 'p1',
+    house_id: 'h1',
+    receipt_url: 'https://api.example.com/receipts',
+  }
+
+  it('posts the receipt with the ids the push carried', async () => {
+    const { fetch, held } = runPush(PAYLOAD)
+    await held()
+    const [url, options] = fetch.mock.calls[0]
+    expect(url).toBe('https://api.example.com/receipts')
+    expect(JSON.parse(options.body)).toEqual({ house_id: 'h1', push_id: 'p1' })
+    vi.unstubAllGlobals()
+  })
+
+  it('still shows the notification when the receipt fails', async () => {
+    const { showNotification, held } = runPush(PAYLOAD, () => Promise.reject(new TypeError('offline')))
+    await expect(held()).resolves.not.toThrow()
+    expect(showNotification).toHaveBeenCalledWith('groceries', { body: 'Jackson paid' })
+    vi.unstubAllGlobals()
+  })
+
+  it('sends nothing for a push without an id', async () => {
+    const { fetch, showNotification, held } = runPush({ title: 't', body: 'b' })
+    await held()
+    expect(showNotification).toHaveBeenCalledOnce()
+    expect(fetch).not.toHaveBeenCalled()
+    vi.unstubAllGlobals()
+  })
+})

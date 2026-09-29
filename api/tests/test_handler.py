@@ -534,7 +534,7 @@ def test_v23_every_route_the_handler_serves_exists_at_the_gateway():
     api_tf = (Path(__file__).parents[2] / "infra" / "api.tf").read_text(encoding="utf-8")
     gateway = set(re.findall(r'route_key\s*=\s*"([^"]+)"', api_tf))
 
-    assert gateway == set(ROUTES) | {"GET /me"}
+    assert gateway == set(ROUTES) | {"GET /me", "POST /receipts"}
 
 
 # --- manual nudge (§T12, §V24, §V25) --------------------------------------
@@ -660,3 +660,72 @@ def test_v26_saving_a_dead_endpoint_is_a_410(store):
     response = handle(request("POST /subscriptions", body={"subscription": subscription}), None)
 
     assert response["statusCode"] == 410
+
+
+# --- delivery receipts (§T14, §V28, §V29) ---------------------------------
+
+
+def receipt(body):
+    """What the service worker sends: no Authorization, so no claims."""
+    return handle({"routeKey": "POST /receipts", "body": json.dumps(body)}, None)
+
+
+def test_v29_a_nudge_is_recorded_with_the_id_it_carries(store, owed):
+    nudge("dan")
+
+    ((_, payload),) = owed
+    (pushed,) = store.list_pushes("h1", since=datetime(2000, 1, 1, tzinfo=UTC))
+    assert (pushed["push_id"], pushed["kind"]) == (payload["push_id"], "nudge")
+
+
+def test_v28_a_receipt_needs_no_session(store):
+    store.record_push("h1", "p1", member_id="dan", kind="entry", now=datetime.now(UTC))
+
+    assert receipt({"house_id": "h1", "push_id": "p1"})["statusCode"] == 204
+    (pushed,) = store.list_pushes("h1", since=datetime(2000, 1, 1, tzinfo=UTC))
+    assert pushed["delivered_at"]
+
+
+def test_v28_an_unknown_receipt_is_a_404_and_writes_nothing(store):
+    before = store._table.scan()["Items"]
+
+    assert receipt({"house_id": "h1", "push_id": "guessed"})["statusCode"] == 404
+    assert store._table.scan()["Items"] == before
+
+
+@pytest.mark.parametrize("body", [{}, {"house_id": "h1"}, {"push_id": "p1"}])
+def test_a_receipt_missing_its_ids_is_a_400(store, body):
+    assert receipt(body)["statusCode"] == 400
+
+
+def test_the_delivery_view_summarises_the_last_week(store):
+    from datetime import timedelta
+
+    now = datetime.now(UTC)
+    store.record_push("h1", "p1", member_id="dan", kind="entry", now=now - timedelta(hours=1))
+    store.record_push("h1", "p2", member_id="dan", kind="entry", now=now - timedelta(hours=1))
+    store.receive_push("h1", "p1", now=now)
+
+    response = handle(request("GET /deliveries", sub=ADMIN_SUB), None)
+
+    assert response["statusCode"] == 200
+    overall = json.loads(response["body"])["overall"]
+    assert (overall["received"], overall["undelivered"], overall["rate"]) == (1, 1, 0.5)
+
+
+def test_v28_receipts_is_the_only_route_without_a_jwt():
+    """Every other route keeps the authorizer. Read from the gateway config,
+    because that — not the handler — is where the check actually happens."""
+    import re
+    from pathlib import Path
+
+    api_tf = (Path(__file__).parents[2] / "infra" / "api.tf").read_text(encoding="utf-8")
+    blocks = re.findall(r'resource "aws_apigatewayv2_route" "\w+" \{(.*?)\n\}', api_tf, re.S)
+    auth = {
+        re.search(r'route_key\s*=\s*"([^"]+)"', b).group(1): (
+            re.search(r'authorization_type\s*=\s*"([^"]+)"', b) or [None, "NONE"]
+        )[1]
+        for b in blocks
+    }
+
+    assert {route for route, kind in auth.items() if kind != "JWT"} == {"POST /receipts"}

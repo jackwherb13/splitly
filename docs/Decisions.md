@@ -2,6 +2,20 @@
 
 Source of truth. Vault note `MyNotes/Projects/Splitly/Decisions.md` is an at-a-glance index pointing here.
 
+## T14 delivery receipts + rate view — 2026-09-29
+
+- **`/review` returned NO-GO on one BLOCK: the service worker cannot authenticate.** The token is in `localStorage`, which a worker cannot read; and copying it somewhere readable would not help, because it lasts an hour and pushes arrive days after the app was last opened. Receipts would fail precisely on idle phones — biasing the measurement against the case §C19 exists for
+- **So `POST /receipts` is the one public route (§V28).** The push id — a random UUID that only ever travels inside the encrypted push payload — is the credential. The house comes from the payload too, a written exception to §C51. Safe because the store can only mark an existing, unreceived push as delivered; a guessed id writes nothing. A test reads `api.tf` and asserts no other route has lost its authorizer
+- **Every send is recorded before it is attempted (§V29)**, so a failed send stays in the denominator. No separate failure flag: a failed send never gets a receipt, so it counts as undelivered on its own
+- **The receipt is sent only after the notification is shown**, and a failed receipt is swallowed. A receipt therefore means *displayed*, not merely *received by the worker* — and a receipt problem can never cost a notification, which iOS would punish by revoking the subscription
+- **Undelivered = no receipt after 10 minutes; inside that, pending**, counted on neither side — or one busy minute reads as an outage. **0 of 0 is reported as "no notifications yet", not 100%**
+- **The rate is a lower bound**, and the Admin screen says so: a phone offline when the push arrives displays it but cannot report it
+- **The receipt URL reaches the worker inside the payload** (Lambda env var), because `public/push-sw.js` is a static file with no build-time env. The payload is VAPID-signed and encrypted, so the URL is ours
+- **Deploy incident, cause unknown:** after this deploy Jackson's installed app said "Load failed" on every request, sign-in included. Bisected remotely: AWS side correct, phone reached AWS from Safari, the same build signed in fine in a Safari tab — so the installed app's own state, not the build. Fixed by a restart/reinstall on the phone. Suspect (guess): first update to go through T13's prompt-mode switch-over. **If a second phone does it, it is a bug in update delivery and blocks T16**
+- **Diagnostic worth keeping:** zero requests in API Gateway's `Count` metric while the phone reports "Load failed" means the failure is on the device, not a route or a 5xx — the opposite of T10's reading of the same message
+- **Process slip:** the `deliveryText` tests were written in the same step as the code, so never seen red. Mutation-checked afterwards instead — the 0-of-0 test fails when the guard is removed
+- **Mutation-tested:** letting a second receipt overwrite fails §V28's; dropping the pre-send record fails §V29's three
+
 ## T13 subscription lifecycle + new-version prompt — 2026-09-29
 
 - **`/review` returned NO-GO on one BLOCK: re-subscribing at every launch would have resurrected dead subscriptions.** The browser keeps returning an endpoint the push service has retired; `put_push_subscription` overwrote unconditionally; so each launch would re-save it and the next push would hit a 410 again — §V7's "never retried", broken on every launch. Now §V26: re-saving a dead endpoint is a 410, and the client drops the browser subscription and makes a new one

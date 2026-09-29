@@ -260,6 +260,57 @@ class Store:
             raise
         return True
 
+    # --- delivery receipts (§T14) -------------------------------------
+
+    def record_push(
+        self, house_id: str, push_id: str, member_id: str, kind: str, now: datetime
+    ) -> None:
+        """§V29 — written before the send, so a failed send still counts."""
+        self._table.put_item(
+            Item={
+                "pk": f"HOUSE#{house_id}",
+                "sk": f"PUSH#{push_id}",
+                "push_id": push_id,
+                "member_id": member_id,
+                "kind": kind,
+                "sent_at": now.isoformat(),
+            },
+            ConditionExpression="attribute_not_exists(sk)",  # §V27
+        )
+
+    def receive_push(self, house_id: str, push_id: str, now: datetime) -> bool:
+        """§V28 — the receipt route is public, so this may only mark an
+        existing, unreceived push. Anything else writes nothing."""
+        key = {"pk": f"HOUSE#{house_id}", "sk": f"PUSH#{push_id}"}
+        item = self._table.get_item(Key=key).get("Item")
+        if item is None:
+            return False
+        try:
+            self._table.put_item(
+                Item={**item, "delivered_at": now.isoformat()},
+                ConditionExpression="attribute_exists(sk) AND attribute_not_exists(delivered_at)",
+            )
+        except ClientError as exc:
+            if exc.response["Error"]["Code"] == "ConditionalCheckFailedException":
+                return False
+            raise
+        return True
+
+    def list_pushes(self, house_id: str, since: datetime) -> list[dict]:
+        cutoff = since.isoformat()
+        return [
+            {
+                "push_id": item["push_id"],
+                "member_id": item["member_id"],
+                "kind": item["kind"],
+                "sent_at": item["sent_at"],
+                "delivered_at": item.get("delivered_at"),
+            }
+            # "PUSH#" does not match "PUSHSUB#": the character after PUSH differs.
+            for item in self._query(house_id, "PUSH#")
+            if item["sent_at"] >= cutoff
+        ]
+
     # --- internals ---------------------------------------------------
 
     def _query(self, house_id: str, sk_prefix: str) -> list[dict]:

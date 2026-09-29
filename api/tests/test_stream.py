@@ -247,3 +247,40 @@ def test_a_transient_failure_does_not_retire_the_subscription(table, monkeypatch
     listed = [found["subscription"] for found in Store(table).list_push_subscriptions("h1")]
 
     assert sub("alice") in listed
+
+
+# --- delivery receipts (§T14, §V29) ---------------------------------------
+
+
+@pytest.fixture
+def receipts(monkeypatch):
+    monkeypatch.setitem(os.environ, "SPLITLY_RECEIPT_URL", "https://api.example.com/receipts")
+
+
+def test_the_payload_carries_what_the_receipt_needs(table, sent, receipts):
+    stream.handle(inserted(table, entry()), None)
+
+    _, payload = sent.sent[0]
+    assert payload["house_id"] == "h1"
+    assert payload["receipt_url"] == "https://api.example.com/receipts"
+    assert payload["push_id"]
+
+
+def test_v29_every_send_is_recorded_under_the_id_it_carries(table, sent, receipts):
+    stream.handle(inserted(table, entry()), None)
+
+    pushes = Store(table).list_pushes("h1", since=datetime(2000, 1, 1, tzinfo=UTC))
+    assert sorted(p["push_id"] for p in pushes) == sorted(pl["push_id"] for _, pl in sent.sent)
+    assert sorted(p["member_id"] for p in pushes) == ["alice", "dan"]
+
+
+@pytest.mark.parametrize("failure", [SubscriptionGone("gone"), RuntimeError("500")])
+def test_v29_a_failed_send_is_still_recorded(table, monkeypatch, receipts, failure):
+    """Dropping failures from the count would make delivery look better than
+    it is — delivery assumed, which §C19 forbids."""
+    monkeypatch.setattr(stream, "send", Recorder(fail={sub("alice")["endpoint"]: failure}))
+
+    stream.handle(inserted(table, entry()), None)
+
+    pushes = Store(table).list_pushes("h1", since=datetime(2000, 1, 1, tzinfo=UTC))
+    assert "alice" in [p["member_id"] for p in pushes]

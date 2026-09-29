@@ -1,6 +1,7 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 
-import { addMember, createWriteOff, setMemberActive } from './api'
+import { addMember, createWriteOff, listDeliveries, setMemberActive } from './api'
+import { deliveryText } from './deliveryText'
 import { toCents } from './entryBody'
 
 const money = (cents) => (cents / 100).toFixed(2)
@@ -17,6 +18,12 @@ export default function Admin({ members, balances, onChanged }) {
   const [amount, setAmount] = useState('')
   const [newName, setNewName] = useState('')
   const [newEmail, setNewEmail] = useState('')
+  const [deliveries, setDeliveries] = useState(null)
+
+  // §C19 — measured delivery. A failure to load it is not worth an error.
+  useEffect(() => {
+    listDeliveries().then(setDeliveries, () => {})
+  }, [])
 
   const nameOf = (id) => members.find((m) => m.member_id === id)?.name ?? id
   const owedBy = (id) => Math.abs(balances.find((row) => row.member_id === id)?.net ?? 0)
@@ -151,6 +158,28 @@ export default function Admin({ members, balances, onChanged }) {
           </p>
         </>
       )}
+
+      <h3>Notification delivery — last 7 days</h3>
+      {deliveries ? (
+        <ul className="entries">
+          <li className="row">
+            <span>Everyone</span>
+            <span>{deliveryText(deliveries.overall)}</span>
+          </li>
+          {Object.entries(deliveries.members).map(([memberId, tally]) => (
+            <li key={memberId} className="row small">
+              <span>{nameOf(memberId)}</span>
+              <span>{deliveryText(tally)}</span>
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <p className="muted">Loading...</p>
+      )}
+      <p className="muted small">
+        Counted from receipts the phones send back, so it can only undercount: a
+        phone that was offline shows the notification but cannot report it.
+      </p>
 
       {error && <p className="error">{error}</p>}
     </section>

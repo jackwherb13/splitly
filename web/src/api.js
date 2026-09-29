@@ -53,6 +53,7 @@ export const addMember = (name, email) =>
   call('/members', { method: 'POST', body: JSON.stringify({ name, email }) })
 export const nudge = (memberId) =>
   call('/nudges', { method: 'POST', body: JSON.stringify({ member_id: memberId }) })
+export const listDeliveries = () => call('/deliveries')
 export const createWriteOff = (body) =>
   call('/write-offs', { method: 'POST', body: JSON.stringify(body) })
 export const createEntry = (body) =>
