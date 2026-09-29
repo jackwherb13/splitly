@@ -18,7 +18,7 @@ import pytest
 from moto import mock_aws
 
 from splitly.ledger import Entry, Member, balances
-from splitly.store import AlreadyExists, DuplicateEntry, Store
+from splitly.store import AlreadyExists, DeadSubscription, DuplicateEntry, Store
 
 TABLE = "splitly-test"
 
@@ -112,6 +112,7 @@ def test_store_exposes_no_mutation_path(store):
         "claim_nudge",
         "membership",
         "put_push_subscription",
+        "retire_push_subscription",
         "list_push_subscriptions",
     }
 
@@ -314,3 +315,56 @@ def test_a_claim_leaves_the_ledger_alone(store):
     store.claim_nudge("h1", "dan", by="jackson", now=NOON)
     assert store.list_entries("h1") == []
     assert store.list_members("h1") == []
+
+
+# --- subscription lifecycle (§T13, §V7, §V26, §V27) ------------------------
+
+PHONE = {"endpoint": "https://push.example.com/dan-phone", "keys": {}}
+
+
+def test_v7_a_retired_subscription_is_no_longer_listed_for_sending(store):
+    store.put_push_subscription("h1", "dan", PHONE)
+
+    store.retire_push_subscription("h1", "dan", PHONE["endpoint"], now=NOON)
+
+    assert store.list_push_subscriptions("h1") == []
+
+
+def test_v26_a_dead_endpoint_cannot_be_saved_back_to_life(store):
+    """The browser still holds an endpoint the push service has retired, and
+    re-subscribing at every launch would otherwise resurrect it."""
+    store.put_push_subscription("h1", "dan", PHONE)
+    store.retire_push_subscription("h1", "dan", PHONE["endpoint"], now=NOON)
+
+    with pytest.raises(DeadSubscription):
+        store.put_push_subscription("h1", "dan", PHONE)
+
+    assert store.list_push_subscriptions("h1") == []
+
+
+def test_v27_retiring_never_creates_an_item(store):
+    store.retire_push_subscription("h1", "dan", "https://push.example.com/never-saved", now=NOON)
+
+    assert store._table.scan()["Items"] == []
+
+
+def test_v27_retiring_never_touches_an_entry(store):
+    """The stream role gains PutItem for this; §V8 is held by the key being
+    built here, from the PUSHSUB# prefix, never passed in."""
+    store.put_entry(make_entry(entry_id="e1", house_id="h1"))
+    before = store.list_entries("h1")
+
+    store.retire_push_subscription("h1", "e1", "e1", now=NOON)
+
+    assert store.list_entries("h1") == before
+    assert [item["sk"] for item in store._table.scan()["Items"]] == ["ENTRY#e1"]
+
+
+def test_retiring_one_device_leaves_the_others(store):
+    laptop = {"endpoint": "https://push.example.com/dan-laptop", "keys": {}}
+    store.put_push_subscription("h1", "dan", PHONE)
+    store.put_push_subscription("h1", "dan", laptop)
+
+    store.retire_push_subscription("h1", "dan", PHONE["endpoint"], now=NOON)
+
+    assert [s["subscription"] for s in store.list_push_subscriptions("h1")] == [laptop]

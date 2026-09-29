@@ -7,7 +7,8 @@ export default defineConfig({
   plugins: [
     react(),
     VitePWA({
-      registerType: 'autoUpdate',
+      // A new version waits for the Reload banner (src/update.js, §T13).
+      registerType: 'prompt',
       includeAssets: ['apple-touch-icon.png'],
       // The generated worker has no push listener of its own (§T11).
       workbox: { importScripts: ['push-sw.js'] },

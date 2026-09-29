@@ -225,3 +225,25 @@ def test_a_failed_send_is_loud_not_silent(table, monkeypatch, capsys, caplog, fa
     (declared,) = metric["_aws"]["CloudWatchMetrics"]
     assert declared["Namespace"] == "Splitly"
     assert declared["Metrics"] == [{"Name": "PushSendFailed", "Unit": "Count"}]
+
+
+def test_v7_a_gone_subscription_is_retired_and_not_sent_to_again(table, monkeypatch):
+    recorder = Recorder(fail={sub("alice")["endpoint"]: SubscriptionGone("gone")})
+    monkeypatch.setattr(stream, "send", recorder)
+
+    stream.handle(inserted(table, entry()), None)
+    listed = [found["subscription"] for found in Store(table).list_push_subscriptions("h1")]
+
+    assert sub("alice") not in listed
+    assert sub("dan") in listed
+
+
+def test_a_transient_failure_does_not_retire_the_subscription(table, monkeypatch):
+    """A 500 is the push service's bad day, not a dead device."""
+    recorder = Recorder(fail={sub("alice")["endpoint"]: RuntimeError("500")})
+    monkeypatch.setattr(stream, "send", recorder)
+
+    stream.handle(inserted(table, entry()), None)
+    listed = [found["subscription"] for found in Store(table).list_push_subscriptions("h1")]
+
+    assert sub("alice") in listed

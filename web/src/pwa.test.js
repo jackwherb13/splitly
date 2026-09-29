@@ -86,3 +86,13 @@ describe('§T11 — the service worker renders a push', () => {
     vi.unstubAllGlobals()
   })
 })
+
+// §T13 — the built worker waits to be told, rather than taking over a page
+// that is running the old bundle. The Reload banner is what tells it.
+describe('§T13 — a new version waits for the Reload tap', () => {
+  it('skips waiting only on request', () => {
+    const sw = readFileSync(dist('sw.js'), 'utf8')
+    expect(sw).toContain('SKIP_WAITING')
+    expect(sw).not.toMatch(/clientsClaim\(\)/)
+  })
+})

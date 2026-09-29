@@ -32,7 +32,12 @@ async function call(path, options = {}) {
   }
 
   const data = await response.json().catch(() => ({}))
-  if (!response.ok) throw new Error(data.error || `Request failed (${response.status})`)
+  if (!response.ok) {
+    // Callers branch on it: a 410 on a subscription means replace it (§V26).
+    const error = new Error(data.error || `Request failed (${response.status})`)
+    error.status = response.status
+    throw error
+  }
   return data
 }
 

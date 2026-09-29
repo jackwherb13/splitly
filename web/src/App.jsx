@@ -8,7 +8,9 @@ import Balances from './Balances'
 import EnablePush from './EnablePush'
 import EntryForm from './EntryForm'
 import { splittable } from './entryBody'
+import { onLaunch } from './launch'
 import SignIn from './SignIn'
+import { watchForUpdates } from './update'
 
 const money = (cents) => (cents / 100).toFixed(2)
 
@@ -18,6 +20,7 @@ export default function App() {
   const [members, setMembers] = useState([])
   const [balances, setBalances] = useState([])
   const [session, setSession] = useState(null)
+  const [reload, setReload] = useState(null)
   const [error, setError] = useState(null)
 
   const refresh = useCallback(async () => {
@@ -45,6 +48,14 @@ export default function App() {
     if (token) refresh()
   }, [token, refresh])
 
+  // §T13 — the rest of startup: keep this device's push subscription current
+  // and storage persistent. Never prompts, never throws.
+  useEffect(() => {
+    if (token) onLaunch(import.meta.env.VITE_VAPID_PUBLIC_KEY)
+  }, [token])
+
+  useEffect(() => watchForUpdates((apply) => setReload(() => apply)), [])
+
   async function add(body) {
     await createEntry(body)
     await refresh()
@@ -54,6 +65,14 @@ export default function App() {
 
   return (
     <>
+      {reload && (
+        <p className="card row">
+          <span>A new version of Splitly is ready.</span>
+          <button type="button" onClick={reload}>
+            Reload
+          </button>
+        </p>
+      )}
       <header>
         <h1>Splitly</h1>
         <button

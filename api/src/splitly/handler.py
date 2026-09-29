@@ -28,7 +28,7 @@ from botocore.exceptions import ClientError
 
 from splitly.ledger import Entry, Member, balances, drilldown
 from splitly.splits import all_to_one, even
-from splitly.store import AlreadyExists, Store
+from splitly.store import AlreadyExists, DeadSubscription, Store
 
 SESSION = "session"
 ADMIN = "admin"
@@ -77,6 +77,10 @@ class BadRequest(Exception):
 
 class Conflict(Exception):
     """The thing being created already exists (§V20)."""
+
+
+class Gone(Exception):
+    """A retired push endpoint was offered again (§V26)."""
 
 
 class TooSoon(Exception):
@@ -327,6 +331,9 @@ def create_nudge(event):
             sent += 1
         except notifications.SubscriptionGone:
             notifications.report_failure("gone", target)
+            store.retire_push_subscription(  # §V7
+                who.house_id, target, subscription["endpoint"], now=datetime.now(UTC)
+            )
         except Exception:
             notifications.report_failure("error", target)
     return _json(201, {"sent": sent})
@@ -344,7 +351,10 @@ def create_subscription(event):
     subscription = _body(event).get("subscription") or {}
     if not subscription.get("endpoint"):
         raise BadRequest("subscription has no endpoint")
-    _get_store().put_push_subscription(who.house_id, who.member_id, subscription)
+    try:
+        _get_store().put_push_subscription(who.house_id, who.member_id, subscription)
+    except DeadSubscription as exc:
+        raise Gone("this subscription is dead; subscribe again") from exc
     return _json(201, {"member_id": who.member_id})
 
 
@@ -427,6 +437,8 @@ def handle(event, context):
         return _json(403, {"error": str(exc)})
     except Conflict as exc:
         return _json(409, {"error": str(exc)})
+    except Gone as exc:
+        return _json(410, {"error": str(exc)})
     except TooSoon as exc:
         return _json(429, {"error": str(exc)})
     except (BadRequest, ValueError, KeyError) as exc:

@@ -2,6 +2,17 @@
 
 Source of truth. Vault note `MyNotes/Projects/Splitly/Decisions.md` is an at-a-glance index pointing here.
 
+## T13 subscription lifecycle + new-version prompt — 2026-09-29
+
+- **`/review` returned NO-GO on one BLOCK: re-subscribing at every launch would have resurrected dead subscriptions.** The browser keeps returning an endpoint the push service has retired; `put_push_subscription` overwrote unconditionally; so each launch would re-save it and the next push would hit a 410 again — §V7's "never retried", broken on every launch. Now §V26: re-saving a dead endpoint is a 410, and the client drops the browser subscription and makes a new one
+- **The stream role gained `PutItem`**, reversing T11's "no write at all". §V7 needs a write from where the 410 is seen, and IAM cannot restrict which sort keys a Put targets inside a partition. §V27 holds the line in code instead: the retire write builds its own `PUSHSUB#` key and only replaces an existing item — the same position the API role has always been in
+- **Retire replaces the item with a tombstone (`dead_at`), not a delete.** No role has `DeleteItem`, and the tombstone is what lets §V26 recognise the endpoint if the browser offers it again
+- **A 500 does not retire a subscription** — only 404/410. Tested both ways
+- **Launch re-subscribe only runs when permission is already `granted`** and never calls `requestPermission` (§V6). `[unverified]` whether iOS allows `pushManager.subscribe` without a tap even then; if not, the call fails quietly and the manual button still works
+- **New-version prompt:** `registerType` `autoUpdate` → `prompt`. The built worker now waits for `SKIP_WAITING` instead of taking over; a banner offers Reload; the app checks for a new worker whenever it returns to the foreground, because iOS resumes installed apps without reloading them. **Prompt, not auto-reload** — a silent reload would lose a half-typed entry
+- **The switch-over itself needs one last double relaunch.** Phones still run the old bundle, which has no banner; only once the new one is loaded does the prompt exist
+- **Mutation-tested:** removing each conditional or the client's 410 branch fails exactly the tests named for §V26/§V27
+
 ## T12 manual nudge — 2026-09-29
 
 - **Jackson's calls:** only someone the house owes can nudge (the person out of pocket chases — §G); only someone who owes can be nudged; **at most once an hour per debtor, house-wide**, so three housemates cannot triple-buzz one person. §V24, §V25

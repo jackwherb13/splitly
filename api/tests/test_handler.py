@@ -634,3 +634,29 @@ def test_a_failed_nudge_push_is_reported_not_raised(store, owed, monkeypatch, ca
     assert response["statusCode"] == 201
     assert json.loads(response["body"])["sent"] == 0
     assert "PushSendFailed" in capsys.readouterr().out
+
+
+# --- subscription lifecycle (§T13, §V7, §V26) -----------------------------
+
+
+def test_v7_a_gone_nudge_subscription_is_retired(store, owed, monkeypatch):
+    from splitly import notifications
+
+    def gone(subscription, payload):
+        raise notifications.SubscriptionGone(subscription["endpoint"])
+
+    monkeypatch.setattr(notifications, "send", gone)
+    nudge("dan")
+
+    assert store.list_push_subscriptions("h1") == []
+
+
+def test_v26_saving_a_dead_endpoint_is_a_410(store):
+    """The client's cue to drop the browser subscription and make a new one."""
+    subscription = {"endpoint": "https://push.example.com/old", "keys": {}}
+    store.put_push_subscription("h1", "jackson", subscription)
+    store.retire_push_subscription("h1", "jackson", subscription["endpoint"], now=datetime.now(UTC))
+
+    response = handle(request("POST /subscriptions", body={"subscription": subscription}), None)
+
+    assert response["statusCode"] == 410

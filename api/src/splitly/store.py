@@ -35,6 +35,10 @@ class DuplicateEntry(Exception):
     """An entry_id already exists. The ledger is append-only (§V8)."""
 
 
+class DeadSubscription(Exception):
+    """The push service retired this endpoint; it stays retired (§V26)."""
+
+
 class AlreadyExists(Exception):
     """The member id is taken, or the login already belongs to a house (§V20)."""
 
@@ -172,22 +176,61 @@ class Store:
     def put_push_subscription(self, house_id: str, member_id: str, subscription: dict) -> None:
         """Keyed on the endpoint, so §C15's re-subscribe-every-launch is
         idempotent by construction rather than by a dedupe pass. One member
-        may hold several: a phone and a laptop are two endpoints."""
-        digest = hashlib.sha256(subscription["endpoint"].encode()).hexdigest()[:16]
-        self._table.put_item(
-            Item={
-                "pk": f"HOUSE#{house_id}",
-                "sk": f"PUSHSUB#{member_id}#{digest}",
-                "member_id": member_id,
-                "subscription": subscription,
-            }
-        )
+        may hold several: a phone and a laptop are two endpoints.
+
+        §V26 — a retired endpoint is refused, not overwritten back to life.
+        The browser keeps offering one the push service has already dropped.
+        """
+        try:
+            self._table.put_item(
+                Item={
+                    "pk": f"HOUSE#{house_id}",
+                    "sk": self._pushsub_key(member_id, subscription["endpoint"]),
+                    "member_id": member_id,
+                    "subscription": subscription,
+                },
+                ConditionExpression="attribute_not_exists(dead_at)",
+            )
+        except ClientError as exc:
+            if exc.response["Error"]["Code"] == "ConditionalCheckFailedException":
+                raise DeadSubscription(subscription["endpoint"]) from exc
+            raise
+
+    def retire_push_subscription(
+        self, house_id: str, member_id: str, endpoint: str, now: datetime
+    ) -> None:
+        """§V7 — a 404/410 endpoint is never sent to again.
+
+        §V27 — the key is built here from the PUSHSUB# prefix, and only an
+        existing item is replaced, so this can neither create an item nor
+        reach an entry. The stream role holds PutItem for this alone.
+        """
+        try:
+            self._table.put_item(
+                Item={
+                    "pk": f"HOUSE#{house_id}",
+                    "sk": self._pushsub_key(member_id, endpoint),
+                    "member_id": member_id,
+                    "dead_at": now.isoformat(),
+                },
+                ConditionExpression="attribute_exists(sk)",
+            )
+        except ClientError as exc:
+            # Already gone, or never saved: nothing to retire.
+            if exc.response["Error"]["Code"] != "ConditionalCheckFailedException":
+                raise
 
     def list_push_subscriptions(self, house_id: str) -> list[dict]:
         return [
             {"member_id": item["member_id"], "subscription": item["subscription"]}
             for item in self._query(house_id, "PUSHSUB#")
+            if "dead_at" not in item
         ]
+
+    @staticmethod
+    def _pushsub_key(member_id: str, endpoint: str) -> str:
+        digest = hashlib.sha256(endpoint.encode()).hexdigest()[:16]
+        return f"PUSHSUB#{member_id}#{digest}"
 
     # --- nudges (§T12) ----------------------------------------------
 

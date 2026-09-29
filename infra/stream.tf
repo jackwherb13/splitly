@@ -1,7 +1,8 @@
 # §C29, §I `strm` — an entry written → DynamoDB Streams → Lambda → push (§T11).
 #
-# Its own role: it reads the stream and queries the table, and has no write
-# permission at all (§V8).
+# Its own role: it reads the stream and queries the table. Its one write is
+# retiring a dead push subscription (§V7); §V27 keeps that write to existing
+# PUSHSUB# items, so §V8 is held by the code, as it is for the API role.
 
 locals {
   stream_function_name = "splitly-stream"
@@ -42,14 +43,14 @@ resource "aws_iam_role_policy_attachment" "stream_exec" {
 }
 
 resource "aws_iam_role_policy" "stream_ledger" {
-  name = "ledger-read"
+  name = "ledger-read-retire-subs"
   role = aws_iam_role.stream.id
 
   policy = jsonencode({
     Version = "2012-10-17"
     Statement = [{
       Effect   = "Allow"
-      Action   = ["dynamodb:Query"]
+      Action   = ["dynamodb:Query", "dynamodb:PutItem"]
       Resource = aws_dynamodb_table.ledger.arn
     }]
   })

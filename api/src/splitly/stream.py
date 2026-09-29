@@ -14,6 +14,7 @@ batch — every live subscription notified twice, and a dead one retried, which
 """
 
 import os
+from datetime import UTC, datetime
 
 import boto3
 from boto3.dynamodb.types import TypeDeserializer
@@ -72,6 +73,9 @@ def _notify(image):
             send(found["subscription"], payload)
         except SubscriptionGone:
             report_failure("gone", member)
+            store.retire_push_subscription(  # §V7
+                house_id, member, found["subscription"]["endpoint"], now=datetime.now(UTC)
+            )
         except Exception:
             report_failure("error", member)
 

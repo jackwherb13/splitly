@@ -25,6 +25,27 @@ export function urlBase64ToUint8Array(base64url) {
   return Uint8Array.from(binary, (character) => character.charCodeAt(0))
 }
 
+const options = (publicKey) => ({
+  // Required by every browser: a push must result in something visible.
+  userVisibleOnly: true,
+  applicationServerKey: urlBase64ToUint8Array(publicKey),
+})
+
+// §V26 — the server refuses an endpoint the push service has retired, and
+// the browser keeps offering it. Drop it and make a new one.
+async function save(pushManager, subscription, publicKey) {
+  try {
+    await saveSubscription(subscription.toJSON())
+    return subscription
+  } catch (err) {
+    if (err.status !== 410) throw err
+    await subscription.unsubscribe()
+    const fresh = await pushManager.subscribe(options(publicKey))
+    await saveSubscription(fresh.toJSON())
+    return fresh
+  }
+}
+
 export async function subscribe(publicKey) {
   if (Notification.permission === 'denied') {
     throw new Error('Notifications are blocked for this site in your browser settings.')
@@ -35,13 +56,17 @@ export async function subscribe(publicKey) {
     throw new Error('Notifications were not enabled.')
   }
 
-  const registration = await navigator.serviceWorker.ready
-  const subscription = await registration.pushManager.subscribe({
-    // Required by every browser: a push must result in something visible.
-    userVisibleOnly: true,
-    applicationServerKey: urlBase64ToUint8Array(publicKey),
-  })
+  const { pushManager } = await navigator.serviceWorker.ready
+  return save(pushManager, await pushManager.subscribe(options(publicKey)), publicKey)
+}
 
-  await saveSubscription(subscription.toJSON())
-  return subscription
+// §C15 — every launch, so the server always holds this device's current
+// endpoint. Only when permission was already granted: this never asks (§V6).
+export async function resubscribe(publicKey) {
+  if (!isSupported() || Notification.permission !== 'granted' || !publicKey) return false
+  const { pushManager } = await navigator.serviceWorker.ready
+  const subscription =
+    (await pushManager.getSubscription()) ?? (await pushManager.subscribe(options(publicKey)))
+  await save(pushManager, subscription, publicKey)
+  return true
 }
