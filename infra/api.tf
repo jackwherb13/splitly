@@ -47,6 +47,22 @@ resource "aws_iam_role_policy" "api_ledger" {
   })
 }
 
+# §T11.5 — adding a member creates their login. This pool only, and no
+# update, delete or password action.
+resource "aws_iam_role_policy" "api_cognito" {
+  name = "member-create"
+  role = aws_iam_role.api.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect   = "Allow"
+      Action   = ["cognito-idp:AdminCreateUser", "cognito-idp:AdminGetUser"]
+      Resource = aws_cognito_user_pool.main.arn
+    }]
+  })
+}
+
 # Born here rather than auto-created by Lambda, which would never expire (§C42).
 resource "aws_cloudwatch_log_group" "api" {
   name              = "/aws/lambda/${local.api_function_name}"
@@ -65,7 +81,8 @@ resource "aws_lambda_function" "api" {
 
   environment {
     variables = {
-      SPLITLY_TABLE = aws_dynamodb_table.ledger.name
+      SPLITLY_TABLE        = aws_dynamodb_table.ledger.name
+      SPLITLY_USER_POOL_ID = aws_cognito_user_pool.main.id
     }
   }
 
@@ -151,6 +168,14 @@ resource "aws_apigatewayv2_route" "balances_list" {
 resource "aws_apigatewayv2_route" "member_set_active" {
   api_id             = aws_apigatewayv2_api.main.id
   route_key          = "PUT /members/{member_id}"
+  target             = "integrations/${aws_apigatewayv2_integration.api.id}"
+  authorization_type = "JWT"
+  authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
+}
+
+resource "aws_apigatewayv2_route" "member_create" {
+  api_id             = aws_apigatewayv2_api.main.id
+  route_key          = "POST /members"
   target             = "integrations/${aws_apigatewayv2_integration.api.id}"
   authorization_type = "JWT"
   authorizer_id      = aws_apigatewayv2_authorizer.cognito.id

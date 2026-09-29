@@ -53,3 +53,29 @@ def test_the_layer_lands_under_dist():
     assert build_layer.pip_args(build_layer.LAYER_DIR)[
         build_layer.pip_args(build_layer.LAYER_DIR).index("--target") + 1
     ] == str(build_layer.LAYER_DIR / "python")
+
+
+def test_the_layer_is_byte_identical_across_builds():
+    """Unchanged deps must not replace the layer on every apply. Compiled
+    .pyc files embed the install time, so they are not shipped; Lambda
+    compiles on import."""
+    assert "--no-compile" in build_layer.pip_args(Path("out"))
+
+
+def test_console_script_launchers_are_pruned(tmp_path):
+    """pip writes host launchers (Windows .exe) that differ every build and
+    that Lambda never runs."""
+    (tmp_path / "python" / "bin").mkdir(parents=True)
+    (tmp_path / "python" / "bin" / "vapid.exe").write_bytes(b"MZ")
+    (tmp_path / "python" / "pywebpush").mkdir()
+    # RECORD lists the launchers' hashes, so it churns with them.
+    (tmp_path / "python" / "pywebpush-2.5.0.dist-info").mkdir()
+    (tmp_path / "python" / "pywebpush-2.5.0.dist-info" / "RECORD").write_text("x")
+    (tmp_path / "python" / "pywebpush-2.5.0.dist-info" / "METADATA").write_text("x")
+
+    build_layer.prune(tmp_path)
+
+    assert not (tmp_path / "python" / "bin").exists()
+    assert not (tmp_path / "python" / "pywebpush-2.5.0.dist-info" / "RECORD").exists()
+    assert (tmp_path / "python" / "pywebpush-2.5.0.dist-info" / "METADATA").exists()
+    assert (tmp_path / "python" / "pywebpush").exists()

@@ -2,11 +2,35 @@
 
 Source of truth. Vault note `MyNotes/Projects/Splitly/Decisions.md` is an at-a-glance index pointing here.
 
+## T11.5 add member + T11.6 stay signed in — 2026-09-29
+
+- **`/review` ran first and returned NO-GO: 2 BLOCK, 4 HARDEN**, all now §V20–V23. The two BLOCKs were the same root: `put_member` and `put_user_house` overwrite. A second "Dan" would have inherited the first Dan's balance; re-adding an existing email would have moved a real login between houses
+- **Member + login link are written in one DynamoDB transaction**, each conditional on not existing. That leaves exactly one partial state — Cognito user created, table not written — and §V20 makes it recoverable: an existing login with **no** house link is an orphan and gets linked on retry; one **with** a link is a 409, untouched
+- **A bug the tests caught before it shipped:** the first version mapped *every* cancelled transaction to "already exists", so a malformed write would have told the admin a false reason. Only `ConditionalCheckFailed` cancellation reasons mean exists
+- **Member id is a slug of the name** (`gabe`, `jackson` — matching what was seeded by hand). Collision is a 409 the admin resolves by changing the name, not a silent suffix
+- **IAM: `AdminCreateUser` + `AdminGetUser` on this pool only** — no update, delete or password actions
+- **§V23 route parity is a text parse of `api.tf`**, not a `terraform show`, so it runs in CI with no credentials. It went red the moment `POST /members` existed in the handler and not the gateway — exactly T10's "Load failed" shape, caught at test time
+- **Stay signed in:** the 30-day refresh token is kept; a 401 triggers one shared refresh and one replay. **§V21 — only a 401 is replayed**, because `POST /entries` mints a fresh id server-side and a replayed 5xx could post the expense twice
+- **A second bug caught by re-reading, not by the first tests:** the first `api.js` wrapped the replay inside the refresh's `try`, so a network blip on the replay signed the user out. Test added, then fixed — only the refresh may end a session
+- **§V22 — sign-out clears both tokens; the remembered email stays**, because it is a convenience rather than a credential
+- **Mutation-tested:** dropping the conditional writes fails exactly the five §V20 tests; dropping `.lower()` fails exactly §V19's; keeping the refresh token on sign-out fails exactly §V22's three; replaying any failure fails exactly the no-5xx-replay test
+- **Not done, noted by review (N-3):** a 30-day token makes revoking access matter, and nothing revokes it. Marking someone inactive does not sign them out
+
+## One-time pre-launch ledger reset — 2026-09-28
+
+- **Four test entries deleted from the live table by hand**, Jackson's call: groceries, electric, gas, and a write-off for `alice` — all written while building T7–T8.5, two naming `alice`/`dan`, who were never members. Balances before: `dan` −$3.33, `jackson` +$3.33
+- **This breaks §C6/§V8 on purpose, once, before T16.** No housemate had used the ledger, so no one's history changed. **Not a precedent:** after T16 ships, a wrong entry is corrected by a compensating entry or a write-off (§C50), never a delete. Done with the admin role; the API role still has no `DeleteItem`
+- **Same session, same manual path: Gabe added by hand** (Cognito user, `MEMBER#gabe`, `USER#<sub>` link) and Jackson reactivated. There is still **no add-member feature** — the bootstrap gap T8.5 was meant to close is open, and no §T row owns it
+- **Found while adding him: Cognito usernames here are case-sensitive**, and `SignIn.jsx` sends the email as typed. `Gmetcal@…` returns “User does not exist” for a user created as `gmetcal@…`
+
 ## T11 notify on entry create — 2026-09-28
 
 - **Dependencies ride in a Lambda layer built by `npm run build`** into `dist/lambda/layer` (§C37). The code zip stays `api/src`, so a code change does not re-upload 34MB of crypto
 - **Wheels are pinned to `manylinux2014_x86_64` / cp311**, not the build machine. `cryptography` is compiled; a plain `pip install` on Windows would ship `.pyd` files and the function would die at import — the exact landmine T9 named
 - **The first build failed, and the failure was the lesson.** A pinned platform forces `--only-binary=:all:`, and `http-ece` publishes *no wheel at all*. Fix is two passes: `pip wheel` on the host turns pure-Python sdists into `py3-none-any` wheels, then the pinned install finds them via `--find-links`. Host-only binary wheels in the same folder are ignored by the pinned install, so a compiled sdist-only dependency would still fail loudly. Classified a code bug, not a spec gap — the oracle caught it at build time, nothing silent got through
+- **The layer must be byte-identical across builds.** The second apply replaced a layer nothing had changed in. Two identical builds differed in 301 files: every `.pyc` (they embed the install time), five Windows `bin/*.exe` script launchers, and the `RECORD` manifests listing those launchers' hashes. Now `--no-compile` and a prune of `bin/` + `RECORD` → 0 differing files. Cost: Lambda compiles the pure-Python deps on cold start instead. Churn was harmless but kept `terraform plan` from ever being clean — the drift signal T20 relies on
+- **Packaging verified in Lambda**, not just in tests: the stream function started cold in 1,058 ms with no `ImportModuleError`, triggered by the pre-launch reset's four deletes (REMOVE events, correctly ignored)
+- **Verified on the phone 2026-09-29.** Gabe, the first real housemate, logged two expenses; Jackson's phone got the push. Stream logs clean — no ERROR, no `PushSendFailed`. Cold start 1,043 ms, first send 1.8 s
 - **Who is notified: everyone who owes on the entry** — the payer owes nothing on it, so is not. The entry does not record who typed it in; logging an expense someone else paid notifies you about your own action. **Jackson accepted that; no `created_by`**
 - **Send failures are never raised, and never quiet.** A raise makes Lambda retry the whole batch: every live subscription notified twice, and a dead one retried — the retry §V7 forbids. Mutation-tested: removing the catch fails exactly the test that owns it. Retiring dead subscriptions stays with T13
 - **Jackson asked for failures to be raised; resolved as *loud*, not raised.** Each failure logs at ERROR and emits a `PushSendFailed` metric (dimension `Reason` = `gone`|`error`) via CloudWatch Embedded Metric Format — a stdout JSON line, so no IAM or API call. T21's alarm sits on it. Raising after all sends was rejected: it keeps §V7 but re-notifies everyone who already got the push

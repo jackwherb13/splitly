@@ -1,6 +1,6 @@
 import { useState } from 'react'
 
-import { createWriteOff, setMemberActive } from './api'
+import { addMember, createWriteOff, setMemberActive } from './api'
 import { toCents } from './entryBody'
 
 const money = (cents) => (cents / 100).toFixed(2)
@@ -15,6 +15,8 @@ export default function Admin({ members, balances, onChanged }) {
   const [forgiven, setForgiven] = useState(owing[0]?.member_id ?? '')
   const [absorber, setAbsorber] = useState('')
   const [amount, setAmount] = useState('')
+  const [newName, setNewName] = useState('')
+  const [newEmail, setNewEmail] = useState('')
 
   const nameOf = (id) => members.find((m) => m.member_id === id)?.name ?? id
   const owedBy = (id) => Math.abs(balances.find((row) => row.member_id === id)?.net ?? 0)
@@ -46,6 +48,14 @@ export default function Admin({ members, balances, onChanged }) {
     )
   }
 
+  function add() {
+    return run(async () => {
+      await addMember(newName, newEmail)
+      setNewName('')
+      setNewEmail('')
+    })
+  }
+
   return (
     <section className="card">
       <h2>Admin</h2>
@@ -72,6 +82,24 @@ export default function Admin({ members, balances, onChanged }) {
       <p className="muted small">
         Someone who has left keeps their entries and their balance. They are only
         taken out of new splits.
+      </p>
+
+      <h3>Add a member</h3>
+      <label htmlFor="new-name">Name</label>
+      <input id="new-name" value={newName} onChange={(e) => setNewName(e.target.value)} />
+      <label htmlFor="new-email">Email</label>
+      <input
+        id="new-email"
+        type="email"
+        autoCapitalize="none"
+        value={newEmail}
+        onChange={(e) => setNewEmail(e.target.value)}
+      />
+      <button type="button" onClick={add} disabled={busy || !newName.trim() || !newEmail.trim()}>
+        {busy ? 'Saving...' : 'Add member'}
+      </button>
+      <p className="muted small">
+        No email is sent. Tell them to open the app and sign in with this address.
       </p>
 
       <h3>Write off a debt</h3>

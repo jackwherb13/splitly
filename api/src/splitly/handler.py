@@ -19,14 +19,16 @@ hole shipping.
 
 import json
 import os
+import re
 import uuid
 from datetime import UTC, datetime
 
 import boto3
+from botocore.exceptions import ClientError
 
 from splitly.ledger import Entry, Member, balances, drilldown
 from splitly.splits import all_to_one, even
-from splitly.store import Store
+from splitly.store import AlreadyExists, Store
 
 SESSION = "session"
 ADMIN = "admin"
@@ -37,6 +39,7 @@ ADMIN = "admin"
 MEMBER_KINDS = frozenset({"expense", "payment"})
 
 _store = None
+_cognito = None
 
 
 def _get_store():
@@ -47,6 +50,13 @@ def _get_store():
         table = boto3.resource("dynamodb").Table(os.environ["SPLITLY_TABLE"])
         _store = Store(table)
     return _store
+
+
+def _get_cognito():
+    global _cognito
+    if _cognito is None:
+        _cognito = boto3.client("cognito-idp")
+    return _cognito
 
 
 class Unauthenticated(Exception):
@@ -63,6 +73,10 @@ class Forbidden(Exception):
 
 class BadRequest(Exception):
     """The caller got it wrong. A 400, never a 500."""
+
+
+class Conflict(Exception):
+    """The thing being created already exists (§V20)."""
 
 
 def _claims(event):
@@ -215,6 +229,56 @@ def set_member_active(event):
     )
 
 
+def _login_for(email):
+    """The Cognito user for this email, created if absent. Already present
+    is not an error here: it may be an orphan of a failed add, and §V20
+    lets the store decide whether it is already someone's."""
+    client = _get_cognito()
+    pool = os.environ["SPLITLY_USER_POOL_ID"]
+    try:
+        created = client.admin_create_user(
+            UserPoolId=pool,
+            Username=email,
+            UserAttributes=[
+                {"Name": "email", "Value": email},
+                {"Name": "email_verified", "Value": "true"},
+            ],
+            # §C4 — no invite mail carrying a temporary password.
+            MessageAction="SUPPRESS",
+        )
+        return created["User"]["Username"]
+    except ClientError as exc:
+        code = exc.response["Error"]["Code"]
+        if code == "UsernameExistsException":
+            return client.admin_get_user(UserPoolId=pool, Username=email)["Username"]
+        if code == "InvalidParameterException":
+            raise BadRequest(f"not a usable email: {email!r}") from exc
+        raise
+
+
+def create_member(event):
+    """§T11.5 — one act replaces the three writes done by hand for Gabe.
+
+    The email is lowercased because the pool is case-sensitive (§V19, B7).
+    The house comes from the session and the new member is never an admin,
+    whatever the body says.
+    """
+    body = _body(event)
+    name = (body.get("name") or "").strip()
+    email = (body.get("email") or "").strip().lower()
+    member_id = re.sub(r"[^a-z0-9]+", "-", name.lower()).strip("-")
+    if not member_id or not email:
+        raise BadRequest("a name and an email are both required")
+
+    house_id = _house(event)
+    user_id = _login_for(email)
+    try:
+        _get_store().add_member(house_id, Member(member_id=member_id, name=name), user_id)
+    except AlreadyExists as exc:
+        raise Conflict(f"{name} or {email} is already a member") from exc
+    return _json(201, {"member_id": member_id, "name": name, "active": True})
+
+
 def create_subscription(event):
     """§C15, §T10 — store the browser's PushSubscription against this session.
 
@@ -280,6 +344,7 @@ ROUTES = {
     "GET /balances": (list_balances, SESSION),
     "POST /subscriptions": (create_subscription, SESSION),
     "PUT /members/{member_id}": (set_member_active, ADMIN),
+    "POST /members": (create_member, ADMIN),
     "POST /write-offs": (create_write_off, ADMIN),
 }
 
@@ -306,5 +371,7 @@ def handle(event, context):
         return _json(403, {"error": "not a member of any house"})
     except Forbidden:
         return _json(403, {"error": "admin only"})
+    except Conflict as exc:
+        return _json(409, {"error": str(exc)})
     except (BadRequest, ValueError, KeyError) as exc:
         return _json(400, {"error": str(exc)})

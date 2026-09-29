@@ -35,6 +35,10 @@ class DuplicateEntry(Exception):
     """An entry_id already exists. The ledger is append-only (§V8)."""
 
 
+class AlreadyExists(Exception):
+    """The member id is taken, or the login already belongs to a house (§V20)."""
+
+
 def _as_int(value: int | Decimal) -> int:
     """DynamoDB hands numbers back as Decimal; cents are always int here."""
     return int(value)
@@ -106,6 +110,47 @@ class Store:
                 "admin": admin,
             }
         )
+
+    def add_member(self, house_id: str, member: Member, user_id: str) -> None:
+        """§T11.5, §V20 — a new member and their login link, both or neither.
+
+        Neither write may overwrite: a taken id would hand one person another's
+        balance, and an existing link would move a real login between houses.
+        """
+        # The table's client serializes plain values itself.
+        def put(item):
+            return {
+                "Put": {
+                    "TableName": self._table.name,
+                    "Item": item,
+                    "ConditionExpression": "attribute_not_exists(pk)",
+                }
+            }
+
+        try:
+            self._table.meta.client.transact_write_items(
+                TransactItems=[
+                    put({
+                        "pk": f"HOUSE#{house_id}",
+                        "sk": f"MEMBER#{member.member_id}",
+                        "member_id": member.member_id,
+                        "name": member.name,
+                        "active": member.active,
+                    }),
+                    put({
+                        "pk": f"USER#{user_id}",
+                        "sk": "HOUSE",
+                        "house_id": house_id,
+                        "member_id": member.member_id,
+                        "admin": False,
+                    }),
+                ]
+            )
+        except ClientError as exc:
+            reasons = [r.get("Code") for r in exc.response.get("CancellationReasons", [])]
+            if "ConditionalCheckFailed" in reasons:
+                raise AlreadyExists(member.member_id) from exc
+            raise
 
     def membership(self, user_id: str) -> Membership | None:
         """§C51 — the only way a request learns its house, and its privilege.

@@ -6,6 +6,10 @@ Wheels are pinned to the Lambda platform, not the machine running the build:
 Two passes, because a pinned platform forbids sdists and `http-ece` ships
 nothing else: the host turns sdists into wheels, then the pinned install finds
 the pure-Python ones there. A compiled sdist-only dependency still fails loudly.
+
+The output must be byte-identical across builds, or every apply replaces the
+layer: no .pyc (they embed the install time), no host script launchers,
+no RECORD (it lists the launchers' hashes).
 """
 
 import shutil
@@ -46,9 +50,17 @@ def pip_args(layer_dir, wheelhouse=WHEEL_DIR):
         "--python-version", "3.11",
         "--only-binary=:all:",
         "--find-links", str(wheelhouse),
+        "--no-compile",
         "--quiet",
         *requirements(),
     ]
+
+
+def prune(layer_dir):
+    shutil.rmtree(layer_dir / "python" / "bin", ignore_errors=True)
+    # pip's uninstall manifest; it lists the launchers' hashes.
+    for record in (layer_dir / "python").glob("*.dist-info/RECORD"):
+        record.unlink()
 
 
 if __name__ == "__main__":
@@ -56,3 +68,4 @@ if __name__ == "__main__":
         shutil.rmtree(stale, ignore_errors=True)
     subprocess.run(wheel_args(WHEEL_DIR), check=True)
     subprocess.run(pip_args(LAYER_DIR), check=True)
+    prune(LAYER_DIR)

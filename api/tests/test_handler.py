@@ -396,3 +396,140 @@ def test_a_subscription_without_an_endpoint_is_a_client_error(store):
     assert handle(request("POST /subscriptions", {"subscription": {}}), None)[
         "statusCode"
     ] == 400
+
+
+# --- add member (§T11.5, §V19, §V20) -------------------------------------
+
+
+class FakeCognito:
+    """Stands in for the cognito-idp client. Raises the real botocore error
+    shape, because the handler branches on the error code."""
+
+    def __init__(self, existing=None, invalid=False):
+        self.existing = existing or {}  # username -> sub
+        self.invalid = invalid
+        self.created = []
+
+    @staticmethod
+    def _error(code):
+        from botocore.exceptions import ClientError
+
+        return ClientError({"Error": {"Code": code, "Message": code}}, "op")
+
+    def admin_create_user(self, **kwargs):
+        if self.invalid:
+            raise self._error("InvalidParameterException")
+        if kwargs["Username"] in self.existing:
+            raise self._error("UsernameExistsException")
+        self.created.append(kwargs)
+        sub = f"sub-{len(self.created)}"
+        self.existing[kwargs["Username"]] = sub
+        return {"User": {"Username": sub}}
+
+    def admin_get_user(self, **kwargs):
+        return {"Username": self.existing[kwargs["Username"]]}
+
+
+@pytest.fixture
+def cognito(monkeypatch):
+    fake = FakeCognito()
+    monkeypatch.setattr(handler, "_cognito", fake)
+    monkeypatch.setitem(os.environ, "SPLITLY_USER_POOL_ID", "us-east-1_pool")
+    return fake
+
+
+def add(body):
+    return handle(request("POST /members", body=body, sub=ADMIN_SUB), None)
+
+
+def test_an_admin_adds_a_member_who_can_then_sign_in(store, cognito):
+    response = add({"name": "Gabe", "email": "gmetcal@gmu.edu"})
+
+    assert response["statusCode"] == 201
+    assert [m.name for m in store.list_members("h1")] == ["Gabe"]
+    (created,) = cognito.created
+    found = store.membership(cognito.existing["gmetcal@gmu.edu"])
+    assert (found.house_id, found.member_id, found.admin) == ("h1", "gabe", False)
+    # §C4 — no invite mail with a temporary password in it.
+    assert created["MessageAction"] == "SUPPRESS"
+    assert {"Name": "email_verified", "Value": "true"} in created["UserAttributes"]
+
+
+def test_v19_the_email_is_lowercased_before_cognito_sees_it(store, cognito):
+    """B7 — the pool is case-sensitive, so `Gmetcal@` would make a user who
+    can only ever sign in by typing the capital."""
+    add({"name": "Gabe", "email": "  Gmetcal@GMU.edu "})
+
+    (created,) = cognito.created
+    assert created["Username"] == "gmetcal@gmu.edu"
+    assert {"Name": "email", "Value": "gmetcal@gmu.edu"} in created["UserAttributes"]
+
+
+def test_the_new_member_is_never_an_admin_whatever_the_body_says(store, cognito):
+    add({"name": "Gabe", "email": "g@example.com", "admin": True})
+
+    assert store.membership(cognito.existing["g@example.com"]).admin is False
+
+
+def test_the_house_comes_from_the_session_not_the_body(store, cognito):
+    """§C51."""
+    add({"name": "Gabe", "email": "g@example.com", "house_id": "other"})
+
+    assert store.membership(cognito.existing["g@example.com"]).house_id == "h1"
+    assert store.list_members("other") == []
+
+
+def test_v20_a_taken_name_is_a_conflict(store, cognito):
+    add({"name": "Dan", "email": "dan1@example.com"})
+
+    response = add({"name": "Dan", "email": "dan2@example.com"})
+
+    assert response["statusCode"] == 409
+    assert store.membership(cognito.existing["dan1@example.com"]).member_id == "dan"
+
+
+def test_v20_an_email_already_in_a_house_is_a_conflict_not_a_move(store, cognito):
+    add({"name": "Gabe", "email": "g@example.com"})
+
+    response = add({"name": "Gabriel", "email": "g@example.com"})
+
+    assert response["statusCode"] == 409
+    assert store.membership(cognito.existing["g@example.com"]).member_id == "gabe"
+
+
+def test_v20_an_orphaned_login_is_linked_on_retry(store, cognito):
+    """Cognito succeeded and the table write did not. The retry must finish
+    the job rather than be refused forever."""
+    cognito.existing["g@example.com"] = "sub-orphan"
+
+    response = add({"name": "Gabe", "email": "g@example.com"})
+
+    assert response["statusCode"] == 201
+    assert store.membership("sub-orphan").member_id == "gabe"
+
+
+def test_an_invalid_email_is_a_client_error_not_a_500(store, monkeypatch):
+    """A 500 comes back without CORS headers, which Safari reports as
+    "Load failed" and hides the real reason."""
+    monkeypatch.setattr(handler, "_cognito", FakeCognito(invalid=True))
+    monkeypatch.setitem(os.environ, "SPLITLY_USER_POOL_ID", "us-east-1_pool")
+
+    assert add({"name": "Gabe", "email": "not-an-email"})["statusCode"] == 400
+
+
+@pytest.mark.parametrize("body", [{"name": "", "email": "g@example.com"}, {"name": "Gabe"}])
+def test_a_name_and_an_email_are_both_required(store, cognito, body):
+    assert add(body)["statusCode"] == 400
+    assert cognito.created == []
+
+
+def test_v23_every_route_the_handler_serves_exists_at_the_gateway():
+    """T10's "Load failed" was a route the gateway did not have. A route
+    missing from either side is unreachable or unhandled."""
+    import re
+    from pathlib import Path
+
+    api_tf = (Path(__file__).parents[2] / "infra" / "api.tf").read_text(encoding="utf-8")
+    gateway = set(re.findall(r'route_key\s*=\s*"([^"]+)"', api_tf))
+
+    assert gateway == set(ROUTES) | {"GET /me"}

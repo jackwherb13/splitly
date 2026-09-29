@@ -1,12 +1,13 @@
 import { useState } from 'react'
 
-import { requestCode, submitCode } from './auth'
+import { lastEmail, requestCode, submitCode } from './auth'
 
 // §C4 — a code, not a link. A link tapped in Mail opens Safari, which is a
 // different browsing context from the installed app, so the session would
 // land somewhere this page cannot see.
 export default function SignIn({ onSignedIn }) {
-  const [email, setEmail] = useState('')
+  // §T11.6 — the last address used, so signing back in is one tap.
+  const [email, setEmail] = useState(lastEmail)
   const [code, setCode] = useState('')
   const [session, setSession] = useState(null)
   const [error, setError] = useState(null)

@@ -18,7 +18,7 @@ import pytest
 from moto import mock_aws
 
 from splitly.ledger import Entry, Member, balances
-from splitly.store import DuplicateEntry, Store
+from splitly.store import AlreadyExists, DuplicateEntry, Store
 
 TABLE = "splitly-test"
 
@@ -108,6 +108,7 @@ def test_store_exposes_no_mutation_path(store):
         "put_member",
         "list_members",
         "put_user_house",
+        "add_member",
         "membership",
         "put_push_subscription",
         "list_push_subscriptions",
@@ -237,3 +238,47 @@ def test_push_subscriptions_do_not_collide_with_entries_or_members(store):
     assert len(store.list_entries("h1")) == 1
     assert len(store.list_members("h1")) == 1
     assert len(store.list_push_subscriptions("h1")) == 1
+
+
+# --- add member (§T11.5, §V20) -------------------------------------------
+
+
+def test_add_member_writes_the_member_and_the_login_link(store):
+    store.add_member("h1", Member(member_id="gabe", name="Gabe"), user_id="sub-gabe")
+
+    assert [m.name for m in store.list_members("h1")] == ["Gabe"]
+    found = store.membership("sub-gabe")
+    assert (found.house_id, found.member_id, found.admin) == ("h1", "gabe", False)
+
+
+def test_v20_a_taken_member_id_is_refused_and_the_original_untouched(store):
+    """Otherwise a second Dan inherits the first Dan's balance."""
+    store.add_member("h1", Member(member_id="dan", name="Dan"), user_id="sub-dan-1")
+
+    with pytest.raises(AlreadyExists):
+        store.add_member("h1", Member(member_id="dan", name="Dan"), user_id="sub-dan-2")
+
+    assert [m.name for m in store.list_members("h1")] == ["Dan"]
+    assert store.membership("sub-dan-2") is None
+
+
+def test_v20_a_linked_user_is_refused_and_not_moved(store):
+    """Re-linking an existing login would move a real person's identity."""
+    store.add_member("h1", Member(member_id="gabe", name="Gabe"), user_id="sub-gabe")
+
+    with pytest.raises(AlreadyExists):
+        store.add_member("h2", Member(member_id="gabriel", name="Gabriel"), user_id="sub-gabe")
+
+    assert store.membership("sub-gabe").house_id == "h1"
+    assert store.list_members("h2") == []
+
+
+def test_v20_neither_write_lands_without_the_other(store):
+    """One transaction: a refused link must not leave a member row behind,
+    or the retry would then collide with its own half."""
+    store.put_user_house("sub-taken", "h1", member_id="someone")
+
+    with pytest.raises(AlreadyExists):
+        store.add_member("h1", Member(member_id="new", name="New"), user_id="sub-taken")
+
+    assert store.list_members("h1") == []
