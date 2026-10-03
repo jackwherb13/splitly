@@ -7,8 +7,10 @@ import EntryForm from './EntryForm'
 import { splittable } from './entryBody'
 import History from './History'
 import Home from './Home'
+import Install from './Install'
 import { onLaunch } from './launch'
 import NavBar from './NavBar'
+import { mustInstall } from './onboarding'
 import { go, hrefFor, useTab } from './route'
 import Settings from './Settings'
 import SignIn from './SignIn'
@@ -64,6 +66,10 @@ export default function App() {
     // §T14.5 — straight to Home, where the balance just changed.
     go('home')
   }
+
+  // §T15a — a Safari tab never reaches sign-in (§C18, §R1).
+  const standalone = window.matchMedia?.('(display-mode: standalone)').matches
+  if (mustInstall({ standalone, prod: import.meta.env.PROD })) return <Install />
 
   if (!token) return <SignIn onSignedIn={setToken} />
 

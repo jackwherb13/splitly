@@ -296,3 +296,48 @@ button.secondary {
   color: var(--on-accent);
   font-weight: 700;
 }
+
+/* --- §T15 onboarding ---------------------------------------------------- */
+
+.install {
+  padding-top: calc(2rem + env(safe-area-inset-top));
+}
+
+.install h1 {
+  margin: 0 0 0.5rem;
+  font-size: 1.75rem;
+  line-height: 1.2;
+}
+
+.steps {
+  margin: 1.5rem 0 0;
+  padding-left: 1.25rem;
+}
+
+.steps li {
+  margin-bottom: 1rem;
+}
+
+.steps img {
+  display: block;
+  width: 100%;
+  margin-top: 0.5rem;
+  border-radius: 10px;
+}
+
+.notify {
+  margin: 0.5rem 0 1rem;
+  border: 2px solid var(--accent);
+}
+
+.notify .cta {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 44px;
+  border-radius: 22px;
+  background: var(--accent);
+  color: var(--on-accent);
+  font-weight: 700;
+  text-decoration: none;
+}
