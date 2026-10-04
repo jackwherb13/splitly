@@ -341,3 +341,50 @@ button.secondary {
   font-weight: 700;
   text-decoration: none;
 }
+
+/* --- §T16.5 Settings folds ---------------------------------------------- */
+
+.fold {
+  border-bottom: 1px solid var(--rule);
+}
+
+.fold > summary {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  min-height: 52px;
+  cursor: pointer;
+  list-style: none;
+}
+
+.fold > summary::-webkit-details-marker {
+  display: none;
+}
+
+.fold > summary > span:first-child {
+  flex-grow: 1;
+}
+
+/* The arrow: points down folded, up open. */
+.fold > summary::after {
+  content: '';
+  width: 0.5rem;
+  height: 0.5rem;
+  margin: 0 0.25rem;
+  border-right: 2px solid var(--muted);
+  border-bottom: 2px solid var(--muted);
+  transform: rotate(45deg) translateY(-25%);
+}
+
+.fold[open] > summary {
+  font-weight: 700;
+}
+
+.fold[open] > summary::after {
+  border-color: var(--accent);
+  transform: rotate(-135deg) translateY(-25%);
+}
+
+.fold[open] {
+  padding-bottom: 0.75rem;
+}

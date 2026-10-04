@@ -16,8 +16,7 @@ export default function EnablePush() {
   // no Notification API at all, so this is where most people land first.
   if (!isSupported()) {
     return (
-      <section className="card">
-        <h2>Get notified</h2>
+      <section>
         <p className="muted small">
           This browser cannot show notifications. On iPhone, add Splitly to your
           home screen and open it from there — Safari tabs never receive them.
@@ -28,8 +27,7 @@ export default function EnablePush() {
 
   if (!PUBLIC_KEY) {
     return (
-      <section className="card">
-        <h2>Get notified</h2>
+      <section>
         <p className="error">
           Not configured: this build has no VAPID public key.
         </p>
@@ -56,8 +54,7 @@ export default function EnablePush() {
   }
 
   return (
-    <section className="card">
-      <h2>Get notified</h2>
+    <section>
       <p className="muted small">
         A nudge when someone adds an expense or a bill is posted, so nobody has to
         chase anyone.

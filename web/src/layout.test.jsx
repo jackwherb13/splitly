@@ -120,3 +120,68 @@ describe('Settings', () => {
     expect(render({ session: { admin: true } })).toMatch(/Add a member/)
   })
 })
+
+// §T16.5 — option A: every section folds, tapped open in place.
+describe('Settings folds', () => {
+  const members = [
+    { member_id: 'jackson', name: 'Jackson', active: true },
+    { member_id: 'gabe', name: 'Gabe', active: true },
+    { member_id: 'old', name: 'Old', active: false },
+  ]
+  const render = (props) =>
+    renderToString(
+      <Settings entries={[{ entry_id: 'a' }]} members={members} balances={[]} session={{ admin: true }}
+        onSignOut={() => {}} onChanged={() => {}} {...props} />,
+    )
+  const folds = (html) => [...html.matchAll(/<details class="fold"( open="")?><summary>(.*?)<\/summary>/g)]
+    .map(([, open, summary]) => ({ open: Boolean(open), summary: summary.replace(/<[^>]+>/g, ' ') }))
+  const withPermission = (permission, fn) => {
+    globalThis.Notification = { permission }
+    try {
+      return fn()
+    } finally {
+      delete globalThis.Notification
+    }
+  }
+
+  it('admin sees five sections, each with its own row', () => {
+    expect(folds(render()).map((f) => f.summary.trim().split(/\s+/)[0])).toEqual([
+      'Notifications', 'Members', 'Add', 'Write', 'Notification',
+    ])
+  })
+
+  it('every admin section starts folded', () => {
+    expect(folds(render()).slice(1).every((f) => !f.open)).toBe(true)
+  })
+
+  it('Notifications is open while they are off — the T15 card lands here', () => {
+    const [notifications] = withPermission('default', () => folds(render()))
+    expect(notifications).toEqual({ open: true, summary: expect.stringMatching(/Notifications\s+Off/) })
+  })
+
+  it('Notifications folds once they are on', () => {
+    const [notifications] = withPermission('granted', () => folds(render()))
+    expect(notifications).toEqual({ open: false, summary: expect.stringMatching(/Notifications\s+On/) })
+  })
+
+  it('Members shows how many are active, not how many rows', () => {
+    expect(folds(render())[1].summary).toMatch(/Members\s+2/)
+  })
+
+  it('Delivery says its window', () => {
+    expect(folds(render())[4].summary).toMatch(/last 7 days/)
+  })
+
+  it('a non-admin gets only the Notifications fold', () => {
+    expect(folds(render({ session: { admin: false } }))).toHaveLength(1)
+  })
+
+  it('§C17 — no Notifications fold while the ledger is empty', () => {
+    expect(folds(render({ entries: [], session: {} }))).toHaveLength(0)
+  })
+
+  it('Sign out is never folded away', () => {
+    const outside = render().replace(/<details[\s\S]*?<\/details>/g, '')
+    expect(outside).toMatch(/Sign out/)
+  })
+})

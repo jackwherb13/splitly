@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react'
 import { addMember, createWriteOff, listDeliveries, setMemberActive } from './api'
 import { deliveryText } from './deliveryText'
 import { toCents } from './entryBody'
+import Fold from './Fold'
 
 const money = (cents) => (cents / 100).toFixed(2)
 
@@ -67,119 +68,123 @@ export default function Admin({ members, balances, onChanged }) {
     <section className="card">
       <h2>Admin</h2>
 
-      <h3>Members</h3>
-      <ul className="entries">
-        {members.map((member) => (
-          <li key={member.member_id} className="row">
-            <span className={member.active ? undefined : 'muted'}>
-              {member.name}
-              {member.active ? '' : ' (left)'}
-            </span>
-            <button
-              type="button"
-              className="mode"
-              disabled={busy}
-              onClick={() => run(() => setMemberActive(member.member_id, !member.active))}
-            >
-              {member.active ? 'Mark as left' : 'Bring back'}
-            </button>
-          </li>
-        ))}
-      </ul>
-      <p className="muted small">
-        Someone who has left keeps their entries and their balance. They are only
-        taken out of new splits.
-      </p>
-
-      <h3>Add a member</h3>
-      <label htmlFor="new-name">Name</label>
-      <input id="new-name" value={newName} onChange={(e) => setNewName(e.target.value)} />
-      <label htmlFor="new-email">Email</label>
-      <input
-        id="new-email"
-        type="email"
-        autoCapitalize="none"
-        value={newEmail}
-        onChange={(e) => setNewEmail(e.target.value)}
-      />
-      <button type="button" onClick={add} disabled={busy || !newName.trim() || !newEmail.trim()}>
-        {busy ? 'Saving...' : 'Add member'}
-      </button>
-      <p className="muted small">
-        No email is sent. Tell them to open the app and sign in with this address.
-      </p>
-
-      <h3>Write off a debt</h3>
-      {owing.length === 0 ? (
-        <p className="muted">Nobody is in debt.</p>
-      ) : (
-        <>
-          <label htmlFor="forgiven">Forgive</label>
-          <select
-            id="forgiven"
-            value={forgiven}
-            onChange={(e) => setForgiven(e.target.value)}
-          >
-            {owing.map((row) => (
-              <option key={row.member_id} value={row.member_id}>
-                {nameOf(row.member_id)} — owes {money(Math.abs(row.net))}
-              </option>
-            ))}
-          </select>
-
-          <label htmlFor="amount">Amount (blank writes off the lot)</label>
-          <input
-            id="amount"
-            inputMode="decimal"
-            placeholder={money(owedBy(forgiven))}
-            value={amount}
-            onChange={(e) => setAmount(e.target.value)}
-          />
-
-          <label htmlFor="absorber">Who absorbs it?</label>
-          <select id="absorber" value={absorber} onChange={(e) => setAbsorber(e.target.value)}>
-            <option value="">Choose someone</option>
-            {members
-              .filter((member) => member.member_id !== forgiven)
-              .map((member) => (
-                <option key={member.member_id} value={member.member_id}>
-                  {member.name}
-                </option>
-              ))}
-          </select>
-
-          <button type="button" onClick={writeOff} disabled={busy || !absorber || !forgiven}>
-            {busy ? 'Saving...' : 'Write it off'}
-          </button>
-          <p className="muted small">
-            This posts an entry, it does not delete anything. The original expense
-            stays on the ledger and the drilldown will show the debt as forgiven
-            rather than paid.
-          </p>
-        </>
-      )}
-
-      <h3>Notification delivery — last 7 days</h3>
-      {deliveries ? (
+      <Fold title="Members" value={String(members.filter((member) => member.active).length)}>
         <ul className="entries">
-          <li className="row">
-            <span>Everyone</span>
-            <span>{deliveryText(deliveries.overall)}</span>
-          </li>
-          {Object.entries(deliveries.members).map(([memberId, tally]) => (
-            <li key={memberId} className="row small">
-              <span>{nameOf(memberId)}</span>
-              <span>{deliveryText(tally)}</span>
+          {members.map((member) => (
+            <li key={member.member_id} className="row">
+              <span className={member.active ? undefined : 'muted'}>
+                {member.name}
+                {member.active ? '' : ' (left)'}
+              </span>
+              <button
+                type="button"
+                className="mode"
+                disabled={busy}
+                onClick={() => run(() => setMemberActive(member.member_id, !member.active))}
+              >
+                {member.active ? 'Mark as left' : 'Bring back'}
+              </button>
             </li>
           ))}
         </ul>
-      ) : (
-        <p className="muted">Loading...</p>
-      )}
-      <p className="muted small">
-        Counted from receipts the phones send back, so it can only undercount: a
-        phone that was offline shows the notification but cannot report it.
-      </p>
+        <p className="muted small">
+          Someone who has left keeps their entries and their balance. They are only
+          taken out of new splits.
+        </p>
+      </Fold>
+
+      <Fold title="Add a member">
+        <label htmlFor="new-name">Name</label>
+        <input id="new-name" value={newName} onChange={(e) => setNewName(e.target.value)} />
+        <label htmlFor="new-email">Email</label>
+        <input
+          id="new-email"
+          type="email"
+          autoCapitalize="none"
+          value={newEmail}
+          onChange={(e) => setNewEmail(e.target.value)}
+        />
+        <button type="button" onClick={add} disabled={busy || !newName.trim() || !newEmail.trim()}>
+          {busy ? 'Saving...' : 'Add member'}
+        </button>
+        <p className="muted small">
+          No email is sent. Tell them to open the app and sign in with this address.
+        </p>
+      </Fold>
+
+      <Fold title="Write off a debt">
+        {owing.length === 0 ? (
+          <p className="muted">Nobody is in debt.</p>
+        ) : (
+          <>
+            <label htmlFor="forgiven">Forgive</label>
+            <select
+              id="forgiven"
+              value={forgiven}
+              onChange={(e) => setForgiven(e.target.value)}
+            >
+              {owing.map((row) => (
+                <option key={row.member_id} value={row.member_id}>
+                  {nameOf(row.member_id)} — owes {money(Math.abs(row.net))}
+                </option>
+              ))}
+            </select>
+
+            <label htmlFor="amount">Amount (blank writes off the lot)</label>
+            <input
+              id="amount"
+              inputMode="decimal"
+              placeholder={money(owedBy(forgiven))}
+              value={amount}
+              onChange={(e) => setAmount(e.target.value)}
+            />
+
+            <label htmlFor="absorber">Who absorbs it?</label>
+            <select id="absorber" value={absorber} onChange={(e) => setAbsorber(e.target.value)}>
+              <option value="">Choose someone</option>
+              {members
+                .filter((member) => member.member_id !== forgiven)
+                .map((member) => (
+                  <option key={member.member_id} value={member.member_id}>
+                    {member.name}
+                  </option>
+                ))}
+            </select>
+
+            <button type="button" onClick={writeOff} disabled={busy || !absorber || !forgiven}>
+              {busy ? 'Saving...' : 'Write it off'}
+            </button>
+            <p className="muted small">
+              This posts an entry, it does not delete anything. The original expense
+              stays on the ledger and the drilldown will show the debt as forgiven
+              rather than paid.
+            </p>
+          </>
+        )}
+      </Fold>
+
+      <Fold title="Notification delivery" value="last 7 days">
+        {deliveries ? (
+          <ul className="entries">
+            <li className="row">
+              <span>Everyone</span>
+              <span>{deliveryText(deliveries.overall)}</span>
+            </li>
+            {Object.entries(deliveries.members).map(([memberId, tally]) => (
+              <li key={memberId} className="row small">
+                <span>{nameOf(memberId)}</span>
+                <span>{deliveryText(tally)}</span>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="muted">Loading...</p>
+        )}
+        <p className="muted small">
+          Counted from receipts the phones send back, so it can only undercount: a
+          phone that was offline shows the notification but cannot report it.
+        </p>
+      </Fold>
 
       {error && <p className="error">{error}</p>}
     </section>
