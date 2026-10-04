@@ -4,6 +4,7 @@ import { addMember, createWriteOff, listDeliveries, setMemberActive } from './ap
 import { deliveryText } from './deliveryText'
 import { toCents } from './entryBody'
 import Fold from './Fold'
+import { inviteText, sendInvite } from './invite'
 
 const money = (cents) => (cents / 100).toFixed(2)
 
@@ -20,6 +21,8 @@ export default function Admin({ members, balances, onChanged }) {
   const [newName, setNewName] = useState('')
   const [newEmail, setNewEmail] = useState('')
   const [deliveries, setDeliveries] = useState(null)
+  // §T15.6 — the member just added, until their invite is sent.
+  const [invited, setInvited] = useState(null)
 
   // §C19 — measured delivery. A failure to load it is not worth an error.
   useEffect(() => {
@@ -59,6 +62,7 @@ export default function Admin({ members, balances, onChanged }) {
   function add() {
     return run(async () => {
       await addMember(newName, newEmail)
+      setInvited({ name: newName.trim(), email: newEmail.trim() })
       setNewName('')
       setNewEmail('')
     })
@@ -108,8 +112,17 @@ export default function Admin({ members, balances, onChanged }) {
           {busy ? 'Saving...' : 'Add member'}
         </button>
         <p className="muted small">
-          No email is sent. Tell them to open the app and sign in with this address.
+          No email is sent. Once they are added, send them the invite.
         </p>
+        {invited && (
+          <button
+            type="button"
+            className="secondary"
+            onClick={() => sendInvite(inviteText(invited.name, invited.email, `${window.location.origin}/`))}
+          >
+            Send invite to {invited.name}
+          </button>
+        )}
       </Fold>
 
       <Fold title="Write off a debt">
