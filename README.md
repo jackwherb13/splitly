@@ -44,7 +44,13 @@ Re-run that after any apply that replaces the API or the user pool.
 `terraform apply` zips `dist/lambda/layer`, so run `npm run build` before it.
 `web/.env.example` lists the keys. Deploying the built app:
 
+`--profile` only reaches `aws`; the `terraform output` calls need
+`AWS_PROFILE`, or they print nothing and the bucket name comes out empty.
+The second line prompts for the MFA code when the 4-hour session has expired.
+
 ```
+$env:AWS_PROFILE = 'splitly'
+aws sts get-caller-identity --profile splitly-mfa
 npm run build
 aws s3 sync dist/web "s3://$(terraform -chdir=infra output -raw web_bucket)" --delete --profile splitly
 aws cloudfront create-invalidation --distribution-id $(terraform -chdir=infra output -raw web_distribution_id) --paths "/*" --profile splitly

@@ -67,6 +67,9 @@ export default function SignIn({ onSignedIn }) {
         </>
       )}
 
+      {/* §T15.5 — Gmail filed 2 of 3 codes from Cognito's shared sender as Spam. */}
+      <p className="muted small">The code can take a minute. Not in your inbox? Check Spam.</p>
+
       {error && <p className="error">{error}</p>}
     </main>
   )
