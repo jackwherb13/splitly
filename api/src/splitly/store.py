@@ -44,6 +44,10 @@ class AlreadyExists(Exception):
     """The member id is taken, or the login already belongs to a house (§V20)."""
 
 
+class DuplicatePending(Exception):
+    """That pending id is taken — a second tap of the same claim (§V40)."""
+
+
 class NotPending(Exception):
     """Already verified or rejected — the other answer got there first (§V31)."""
 
@@ -274,10 +278,15 @@ class Store:
     # --- pending payments (§T16.6) ------------------------------------
 
     def put_pending(self, pending: Pending) -> None:
-        self._table.put_item(
-            Item=self._pending_item(pending),
-            ConditionExpression="attribute_not_exists(pk)",
-        )
+        try:
+            self._table.put_item(
+                Item=self._pending_item(pending),
+                ConditionExpression="attribute_not_exists(pk)",
+            )
+        except ClientError as exc:
+            if exc.response["Error"]["Code"] == "ConditionalCheckFailedException":
+                raise DuplicatePending(pending.pending_id) from exc
+            raise
 
     def list_pending(self, house_id: str) -> list[Pending]:
         """Every status. `balances` counts only the pending ones (§V34)."""

@@ -43,7 +43,8 @@ async function call(path, options = {}) {
 
 export const listEntries = () => call('/entries').then((data) => data.entries)
 export const listMembers = () => call('/members').then((data) => data.members)
-export const listBalances = () => call('/balances').then((data) => data.balances)
+// §T16.7 — both views: each member's net, and who owes who.
+export const listBalances = () => call('/balances')
 export const whoami = () => call('/me')
 export const saveSubscription = (subscription) =>
   call('/subscriptions', { method: 'POST', body: JSON.stringify({ subscription }) })
@@ -60,7 +61,10 @@ export const createEntry = (body) =>
   call('/entries', { method: 'POST', body: JSON.stringify(body) })
 // §T16.6 — "I paid", and the answer from the person paid.
 export const listPending = () => call('/pending-payments').then((data) => data.pending)
-export const claimPayment = (to, amount) =>
-  call('/pending-payments', { method: 'POST', body: JSON.stringify({ to, amount }) })
+export const claimPayment = (to, amount, claimId) =>
+  call('/pending-payments', {
+    method: 'POST',
+    body: JSON.stringify({ to, amount, claim_id: claimId }),
+  })
 export const answerPayment = (pendingId, action) =>
   call(`/pending-payments/${pendingId}`, { method: 'PUT', body: JSON.stringify({ action }) })

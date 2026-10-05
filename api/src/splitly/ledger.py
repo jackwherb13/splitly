@@ -124,6 +124,41 @@ def balances(entries: Iterable[Entry], pending: Iterable[Pending] = ()) -> dict[
     return net
 
 
+def debts(
+    entries: Iterable[Entry], pending: Iterable[Pending] = ()
+) -> dict[tuple[str, str], int]:
+    """Who owes who, person to person (§T16.7, §V37). Key (debtor, creditor).
+
+    Every sharer owes the payer their share. A payment (payer=from, shares
+    {to}) and a write-off (payer=forgiven, shares {forgiver}) offset by the
+    same rule, so neither needs a special case — and a pending payment counts
+    like the payment it stands for (§V34). Raw pairs, never simplified: if Dan
+    owes Jackson and Jackson owes Sam, Dan does not owe Sam.
+
+    Each pair nets to one positive row, so the per-person view always adds up
+    to `balances` (§V37).
+    """
+    owed: dict[tuple[str, str], int] = {}
+
+    def add(debtor: str, creditor: str, amount: int) -> None:
+        if debtor != creditor:
+            owed[(debtor, creditor)] = owed.get((debtor, creditor), 0) + amount
+
+    for entry in entries:
+        for member_id, share in entry.shares.items():
+            add(member_id, entry.payer, share)
+    for claim in pending:
+        if claim.status == "pending":
+            add(claim.to_member, claim.from_member, claim.amount)
+
+    net: dict[tuple[str, str], int] = {}
+    for (debtor, creditor), amount in owed.items():
+        remaining = amount - owed.get((creditor, debtor), 0)
+        if remaining > 0:
+            net[(debtor, creditor)] = remaining
+    return net
+
+
 def drilldown(entries: Iterable[Entry], member_id: str) -> list[Entry]:
     """The entries behind one member's balance (§C7, §V3).
 

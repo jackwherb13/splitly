@@ -573,14 +573,13 @@ def test_someone_owed_money_can_nudge_a_debtor(store, owed):
     assert subscription["endpoint"] == "https://push.example.com/dan"
 
 
-def test_the_nudge_says_the_house_not_me(store, owed):
-    """§V24 — balances are net against the house, not person to person."""
+def test_the_nudge_names_who_is_owed(store, owed):
+    """§V24, amended at T16.7 — debts are person to person, so the nudge says whose."""
     nudge("dan")
 
     ((_, payload),) = owed
     assert "Jackson" in payload["title"]
-    assert "the house" in payload["body"]
-    assert "$20.00" in payload["body"]
+    assert payload["body"] == "You owe Jackson $20.00"
 
 
 def test_v24_someone_not_owed_money_cannot_nudge(store, owed):
@@ -963,3 +962,122 @@ def test_v34_a_partial_claim_leaves_the_rest_nudgeable(store, owing):
     assert nudge("dan")["statusCode"] == 201
     ((_, payload),) = owing
     assert "$5.00" in payload["body"]
+
+
+# --- person to person (§T16.7, §V24, §V37–§V40) -----------------------------
+
+SAM_SUB = "cognito-sam"
+
+
+@pytest.fixture
+def trio(store, monkeypatch):
+    """Dan owes Jackson $20 (groceries). Jackson owes Sam $10 (internet).
+
+    Jackson is owed $10 by the house overall, yet still owes Sam — the case
+    house-net balances could not express.
+    """
+    from splitly import notifications
+
+    for member_id, name in [("jackson", "Jackson"), ("dan", "Dan"), ("sam", "Sam")]:
+        store.put_member("h1", Member(member_id=member_id, name=name))
+        store.put_push_subscription("h1", member_id, {"endpoint": f"https://push.example.com/{member_id}"})
+    store.put_user_house(DAN_SUB, "h1", member_id="dan")
+    store.put_user_house(SAM_SUB, "h1", member_id="sam")
+    bills = [("jackson", "dan", 2000, "groceries"), ("sam", "jackson", 1000, "internet")]
+    for payer, owes, total, what in bills:
+        handle(request("POST /entries", body={
+            "description": what, "kind": "expense", "total": total, "payer": payer,
+            "mode": "all_to_one", "member": owes,
+        }), None)
+
+    sent = []
+    monkeypatch.setattr(
+        notifications, "send", lambda sub, payload: sent.append((sub["endpoint"], payload))
+    )
+    return sent
+
+
+def debt_rows():
+    return body_of(handle(request("GET /balances"), None))["debts"]
+
+
+def test_v37_balances_list_who_owes_who(store, trio):
+    rows = {(r["from"], r["to"]): r["amount"] for r in debt_rows()}
+    assert rows == {("dan", "jackson"): 2000, ("jackson", "sam"): 1000}
+
+
+def test_v39_each_debt_names_the_entries_between_the_two(store, trio):
+    groceries, internet = sorted(entries(), key=lambda e: e["description"])
+    rows = {(r["from"], r["to"]): r["entry_ids"] for r in debt_rows()}
+    assert rows[("dan", "jackson")] == [groceries["entry_id"]]
+    assert rows[("jackson", "sam")] == [internet["entry_id"]]
+
+
+def test_v34_a_pending_payment_is_listed_on_its_pair(store, trio):
+    pending_id = body_of(claim(500))["pending_id"]
+    rows = {(r["from"], r["to"]): r for r in debt_rows()}
+    assert rows[("dan", "jackson")]["amount"] == 1500
+    assert rows[("dan", "jackson")]["pending_ids"] == [pending_id]
+    assert rows[("jackson", "sam")]["pending_ids"] == []
+
+
+def test_v38_you_can_pay_someone_you_owe_even_if_the_house_owes_you(store, trio):
+    """Jackson is up $10 overall but owes Sam $10. Old rule: refused."""
+    assert claim(1000, to="sam", sub=SUB)["statusCode"] == 201
+
+
+def test_v38_you_cannot_pay_someone_you_do_not_owe(store, trio):
+    """Sam is owed, but not by Dan."""
+    assert claim(500, to="sam", sub=DAN_SUB)["statusCode"] == 400
+
+
+def test_v38_a_claim_cannot_exceed_that_pair(store, trio):
+    assert claim(1001, to="sam", sub=SUB)["statusCode"] == 400
+
+
+def test_v40_the_same_claim_twice_is_one_pending(store, trio):
+    first = claim(2000, claim_id="tap-1")
+    second = claim(2000, claim_id="tap-1")
+
+    assert first["statusCode"] == 201
+    assert second["statusCode"] == 200
+    assert body_of(second)["pending_id"] == body_of(first)["pending_id"] == "tap-1"
+    assert len(pending()) == 1
+
+
+def test_v40_someone_elses_claim_id_is_refused(store, trio):
+    claim(2000, claim_id="tap-1")
+    assert claim(1000, to="sam", sub=SUB, claim_id="tap-1")["statusCode"] == 409
+
+
+def test_v24_only_someone_you_owe_can_nudge_you(store, trio):
+    """Sam is owed money — by Jackson, not by Dan."""
+    assert nudge("dan", sub=SAM_SUB)["statusCode"] == 400
+    assert trio == []
+
+
+def test_v24_a_creditor_nudges_for_that_pair_only(store, trio):
+    assert nudge("jackson", sub=SAM_SUB)["statusCode"] == 201
+    ((endpoint, payload),) = trio
+    assert endpoint == "https://push.example.com/jackson"
+    assert payload["body"] == "You owe Sam $10.00"
+
+
+def write_off(forgiven, forgiver, total):
+    return handle(request("POST /write-offs", {
+        "description": "forgiven", "forgiven": forgiven, "total": total,
+        "amounts": {forgiver: total},
+    }, sub=ADMIN_SUB), None)
+
+
+def test_v38_a_write_off_forgives_what_the_debtor_owes_the_forgiver(store, trio):
+    assert write_off("dan", "jackson", 2000)["statusCode"] == 201
+    assert {(r["from"], r["to"]) for r in debt_rows()} == {("jackson", "sam")}
+
+
+def test_v38_a_write_off_by_someone_not_owed_is_refused(store, trio):
+    assert write_off("dan", "sam", 500)["statusCode"] == 400
+
+
+def test_v38_a_write_off_cannot_exceed_the_pair(store, trio):
+    assert write_off("dan", "jackson", 2001)["statusCode"] == 400

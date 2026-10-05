@@ -1,13 +1,18 @@
-// SPEC §T16.6 — pending payments, as the screens need them.
+// SPEC §T16.6, §T16.7 — debts are person to person, read from my side:
+// positive when the other person owes me, negative when I owe them.
 
-// Balances are net against the house, not person to person, so "who did you
-// pay?" has no stored answer. The person owed the most is the best guess.
-export function largestCreditor(balances, me) {
-  const owed = balances.filter((row) => row.member_id !== me && row.net > 0)
-  if (owed.length === 0) return null
-  return owed.reduce((top, row) => (row.net > top.net ? row : top)).member_id
+export function withMe(debts, me, other) {
+  const owedToMe = debts.find((d) => d.from === other && d.to === me)?.amount ?? 0
+  const iOwe = debts.find((d) => d.from === me && d.to === other)?.amount ?? 0
+  return owedToMe - iOwe
 }
 
-// §V3 — what a pending payment did to one person's figure, like a payment.
-export const pendingContribution = (pending, memberId) =>
-  (pending.from === memberId ? pending.amount : 0) - (pending.to === memberId ? pending.amount : 0)
+// §V39 — what one entry contributes between two people: only the share one
+// owes the other, never the entry's whole effect on anyone's balance.
+export const pairLine = (entry, me, other) =>
+  (entry.payer === me ? entry.shares[other] ?? 0 : 0) -
+  (entry.payer === other ? entry.shares[me] ?? 0 : 0)
+
+// A pending payment counts like the payment it stands for (§V34).
+export const pendingLine = (pending, me) =>
+  (pending.from === me ? pending.amount : 0) - (pending.to === me ? pending.amount : 0)

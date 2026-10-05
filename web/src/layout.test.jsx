@@ -23,14 +23,11 @@ describe('tabs live in the URL hash — back swipe and Reload land on the same t
   })
 })
 
-describe('the Home card states your own balance', () => {
-  const house = [
-    { member_id: 'jackson', net: 4500 },
-    { member_id: 'gabe', net: -4500 },
-  ]
+describe('the Home card states your own balance — §T16.7, person to person', () => {
+  const debts = [{ from: 'gabe', to: 'jackson', amount: 4500 }]
 
   it('owed, and by how many', () => {
-    expect(headline(house, 'jackson')).toEqual({
+    expect(headline(debts, 'jackson')).toEqual({
       label: "You're owed",
       amount: '$45.00',
       detail: 'by 1 person',
@@ -38,7 +35,7 @@ describe('the Home card states your own balance', () => {
   })
 
   it('owing — §C40, the sign is carried by words, never a minus in green', () => {
-    expect(headline(house, 'gabe')).toEqual({ label: 'You owe', amount: '$45.00', detail: '' })
+    expect(headline(debts, 'gabe')).toEqual({ label: 'You owe', amount: '$45.00', detail: '' })
   })
 
   it('settled, including someone with no entries yet', () => {
@@ -46,8 +43,17 @@ describe('the Home card states your own balance', () => {
   })
 
   it('counts people, not rows', () => {
-    const three = [...house, { member_id: 'alice', net: -100 }]
+    const three = [...debts, { from: 'alice', to: 'jackson', amount: 100 }]
     expect(headline(three, 'jackson').detail).toBe('by 2 people')
+  })
+
+  it('owing one person and owed by another is not settled — both show', () => {
+    const both = [...debts, { from: 'jackson', to: 'sam', amount: 1000 }]
+    expect(headline(both, 'jackson')).toEqual({
+      label: 'You owe',
+      amount: '$10.00',
+      detail: "You're owed $45.00",
+    })
   })
 })
 
@@ -105,7 +111,7 @@ describe('the bottom bar', () => {
 
 describe('Settings', () => {
   const render = (props) =>
-    renderToString(<Settings entries={[]} members={[]} balances={[]} session={{}} onSignOut={() => {}} onChanged={() => {}} {...props} />)
+    renderToString(<Settings entries={[]} members={[]} debts={[]} session={{}} onSignOut={() => {}} onChanged={() => {}} {...props} />)
 
   it('§C17 — no notifications control until the ledger has shown something', () => {
     expect(render()).not.toMatch(/Turn on notifications|cannot show notifications/)
@@ -130,7 +136,7 @@ describe('Settings folds', () => {
   ]
   const render = (props) =>
     renderToString(
-      <Settings entries={[{ entry_id: 'a' }]} members={members} balances={[]} session={{ admin: true }}
+      <Settings entries={[{ entry_id: 'a' }]} members={members} debts={[]} session={{ admin: true }}
         onSignOut={() => {}} onChanged={() => {}} {...props} />,
     )
   const folds = (html) => [...html.matchAll(/<details class="fold"( open="")?><summary>(.*?)<\/summary>/g)]

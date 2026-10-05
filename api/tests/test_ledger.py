@@ -10,7 +10,7 @@ from datetime import UTC, datetime
 
 import pytest
 
-from splitly.ledger import Entry, Member, Pending, balances, drilldown
+from splitly.ledger import Entry, Member, Pending, balances, debts, drilldown
 
 
 def make_entry(**overrides):
@@ -233,3 +233,47 @@ def test_v34_verifying_leaves_the_balance_where_it_was():
     )
     after = balances([make_entry(), payment], [make_pending(status="verified")])
     assert after == before
+
+
+# --- person to person (§T16.7, §V37) ----------------------------------------
+
+
+def test_v37_an_expense_makes_each_sharer_owe_the_payer():
+    """Jackson fronts $90 split three ways: Alice and Dan each owe him $30."""
+    assert debts([make_entry()]) == {("alice", "jackson"): 3000, ("dan", "jackson"): 3000}
+
+
+def test_v37_a_payment_offsets_by_the_same_rule():
+    payment = make_entry(
+        entry_id="e2", kind="payment", payer="dan", total=3000, shares={"jackson": 3000}
+    )
+    assert debts([make_entry(), payment]) == {("alice", "jackson"): 3000}
+
+
+def test_v37_two_directions_net_to_one_row():
+    """Dan owes Jackson $30; Jackson owes Dan $10 for pizza → one row, $20."""
+    pizza = make_entry(
+        entry_id="e2", payer="dan", total=1000, shares={"jackson": 1000}, description="pizza"
+    )
+    assert debts([make_entry(), pizza])[("dan", "jackson")] == 2000
+    assert ("jackson", "dan") not in debts([make_entry(), pizza])
+
+
+def test_v37_raw_pairs_are_never_simplified():
+    """Dan owes Jackson, Jackson owes Sam — Dan does not owe Sam."""
+    rent = make_entry(entry_id="e2", payer="sam", total=1000, shares={"jackson": 1000})
+    pairs = debts([make_entry(), rent])
+    assert pairs[("jackson", "sam")] == 1000
+    assert ("dan", "sam") not in pairs
+
+
+def test_v34_a_pending_payment_counts_between_the_two():
+    assert ("dan", "jackson") not in debts([make_entry()], [make_pending()])
+
+
+def test_v37_a_write_off_forgives_the_pair_it_names():
+    """§C50 — Jackson forgives what Dan owes him."""
+    forgiven = make_entry(
+        entry_id="e2", kind="write_off", payer="dan", total=3000, shares={"jackson": 3000}
+    )
+    assert ("dan", "jackson") not in debts([make_entry(), forgiven])

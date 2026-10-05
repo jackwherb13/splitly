@@ -14,7 +14,7 @@ import pytest
 from hypothesis import assume, given
 from hypothesis import strategies as st
 
-from splitly.ledger import Entry, Pending, balances, drilldown
+from splitly.ledger import Entry, Pending, balances, debts, drilldown
 from splitly.splits import even
 
 # A fixed roster (§C20 — four people) so members collide across entries and
@@ -179,3 +179,21 @@ def test_v3_drilldown_never_shows_an_entry_that_does_not_touch_the_member(ledger
     for member_id in balances(ledger):
         for entry in drilldown(ledger, member_id):
             assert entry.payer == member_id or member_id in entry.shares
+
+
+@given(ledger=ledgers, waiting=st.lists(pendings(), max_size=6))
+def test_v37_pairs_add_up_to_each_persons_net(ledger, waiting):
+    """The per-person view never drifts from the house total."""
+    net = balances(ledger, waiting)
+    pairs = debts(ledger, waiting)
+    for member in ROSTER:
+        owed = sum(amount for (_, to), amount in pairs.items() if to == member)
+        owes = sum(amount for (frm, _), amount in pairs.items() if frm == member)
+        assert owed - owes == net.get(member, 0)
+
+
+@given(ledger=ledgers, waiting=st.lists(pendings(), max_size=6))
+def test_v37_one_positive_row_per_pair(ledger, waiting):
+    pairs = debts(ledger, waiting)
+    assert all(amount > 0 for amount in pairs.values())
+    assert not any((to, frm) in pairs for frm, to in pairs)

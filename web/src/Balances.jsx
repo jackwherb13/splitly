@@ -1,25 +1,19 @@
 import { useState } from 'react'
 
 import { answerPayment, nudge } from './api'
-import { describeBalance } from './balanceText'
-import { pendingContribution } from './pendingText'
+import PayPanel from './PayPanel'
+import { pairLine, pendingLine, withMe } from './pendingText'
 
 const money = (cents) => (cents / 100).toFixed(2)
+const signed = (cents) => `${cents >= 0 ? '+' : '−'} ${money(Math.abs(cents))}`
 
-// What one entry did to one person's balance: credited if they paid for it,
-// debited by whatever they owe. These add up to the figure above them, which
-// is §C7's "drills down to the entries that produced it" made visible rather
-// than merely true.
-const contribution = (entry, memberId) =>
-  (entry.payer === memberId ? entry.total : 0) - (entry.shares[memberId] ?? 0)
-
-export default function Balances({ balances, entries, members, pending = [], me, onChanged }) {
+// §T16.7 — The House, person to person: each row is one other member and
+// what stands between the two of you. Raw pairs, never simplified (§V37).
+export default function Balances({ debts, entries, members, pending = [], me, onChanged }) {
   const [openFor, setOpenFor] = useState(null)
+  const [payingFor, setPayingFor] = useState(null)
   const [nudged, setNudged] = useState({})
   const [answering, setAnswering] = useState(null)
-
-  // §V24 — offered only to someone the house owes. The server checks again.
-  const owedToMe = (balances.find((row) => row.member_id === me)?.net ?? 0) > 0
 
   async function sendNudge(memberId) {
     setNudged({ ...nudged, [memberId]: 'Sending...' })
@@ -42,48 +36,70 @@ export default function Balances({ balances, entries, members, pending = [], me,
     }
   }
 
-  const nameOf = (id) => members.find((member) => member.member_id === id)?.name ?? id
-  const byId = Object.fromEntries(entries.map((entry) => [entry.entry_id, entry]))
-  const pendingById = Object.fromEntries(pending.map((p) => [p.pending_id, p]))
-
-  if (balances.length === 0) return <p className="muted">Nothing owed yet.</p>
+  // Everyone but me who is still here, or who still has money between us.
+  const others = members.filter(
+    (m) => m.member_id !== me && (m.active || withMe(debts, me, m.member_id) !== 0),
+  )
+  if (others.length === 0) return <p className="muted">Nobody else here yet.</p>
 
   return (
     <ul className="balances">
-      {balances.map((row) => {
-        const { label, amount, settled } = describeBalance(row.net)
-        const open = openFor === row.member_id
+      {others.map(({ member_id: other, name }) => {
+        const between = withMe(debts, me, other)
+        const open = openFor === other
+        const between2 = entries.filter((e) => pairLine(e, me, other) !== 0)
+        const waiting = pending.filter((p) => [p.from, p.to].includes(me) && [p.from, p.to].includes(other))
 
         return (
-          <li key={row.member_id}>
+          <li key={other}>
             <button
               type="button"
               className="balance"
               aria-expanded={open}
-              onClick={() => setOpenFor(open ? null : row.member_id)}
+              onClick={() => setOpenFor(open ? null : other)}
             >
-              <span>{nameOf(row.member_id)}</span>
-              <span className={settled ? 'muted' : 'owed'}>
-                {settled ? 'settled' : `${label} ${amount}`}
+              <span>{name}</span>
+              <span className={between === 0 ? 'muted' : 'owed'}>
+                {between > 0 && `owes you $${money(between)}`}
+                {between < 0 && `you owe $${money(-between)}`}
+                {between === 0 && 'settled with you'}
               </span>
             </button>
 
-            {owedToMe && row.net < 0 && (
+            {/* §V24 — only someone I'm owed by. The server checks again. */}
+            {between > 0 && (
               <p className="row small">
                 <button
                   type="button"
                   className="mode"
-                  disabled={Boolean(nudged[row.member_id])}
-                  onClick={() => sendNudge(row.member_id)}
+                  disabled={Boolean(nudged[other])}
+                  onClick={() => sendNudge(other)}
                 >
                   Nudge
                 </button>
-                {nudged[row.member_id] && <span className="muted">{nudged[row.member_id]}</span>}
+                {nudged[other] && <span className="muted">{nudged[other]}</span>}
               </p>
             )}
 
-            {pending
-              .filter((p) => p.from === row.member_id && p.to === me)
+            {between < 0 &&
+              (payingFor === other ? (
+                <PayPanel
+                  to={other}
+                  name={name}
+                  owe={-between}
+                  onChanged={onChanged}
+                  onClose={() => setPayingFor(null)}
+                />
+              ) : (
+                <p className="row small">
+                  <button type="button" className="mode" onClick={() => setPayingFor(other)}>
+                    I paid them
+                  </button>
+                </p>
+              ))}
+
+            {waiting
+              .filter((p) => p.from === other)
               .map((p) => (
                 <div key={p.pending_id} className="small">
                   <p className="row">
@@ -110,35 +126,21 @@ export default function Balances({ balances, entries, members, pending = [], me,
                 </div>
               ))}
 
+            {/* §V39 — only what is between the two of us; the lines add up to the row. */}
             {open && (
               <ul className="drill">
-                {row.entry_ids.map((entryId) => {
-                  const entry = byId[entryId]
-                  if (!entry) return null
-                  const part = contribution(entry, row.member_id)
-                  return (
-                    <li key={entryId} className="row small">
-                      <span>{entry.description}</span>
-                      <span>
-                        {part >= 0 ? '+' : '−'} {money(Math.abs(part))}
-                      </span>
-                    </li>
-                  )
-                })}
-                {/* §V3 — counted in the figure above, so listed with the entries. */}
-                {(row.pending_ids ?? []).map((pendingId) => {
-                  const p = pendingById[pendingId]
-                  if (!p) return null
-                  const part = pendingContribution(p, row.member_id)
-                  return (
-                    <li key={pendingId} className="row small">
-                      <span>Payment to {nameOf(p.to)} · waiting for verify</span>
-                      <span>
-                        {part >= 0 ? '+' : '−'} {money(Math.abs(part))}
-                      </span>
-                    </li>
-                  )
-                })}
+                {between2.map((entry) => (
+                  <li key={entry.entry_id} className="row small">
+                    <span>{entry.description}</span>
+                    <span>{signed(pairLine(entry, me, other))}</span>
+                  </li>
+                ))}
+                {waiting.map((p) => (
+                  <li key={p.pending_id} className="row small">
+                    <span>Payment to {p.to === me ? 'you' : name} · waiting for verify</span>
+                    <span>{signed(pendingLine(p, me))}</span>
+                  </li>
+                ))}
               </ul>
             )}
           </li>

@@ -4,7 +4,7 @@ import EnablePush from './EnablePush'
 import Fold from './Fold'
 import { notificationPermission } from './onboarding'
 
-export default function Settings({ entries, members, balances, session, onSignOut, onChanged }) {
+export default function Settings({ entries, members, debts, session, onSignOut, onChanged }) {
   return (
     <>
       <h2 className="eyebrow">Settings</h2>
@@ -25,7 +25,7 @@ export default function Settings({ entries, members, balances, session, onSignOu
           Sign out
         </button>
       </p>
-      {session?.admin && <Admin members={members} balances={balances} onChanged={onChanged} />}
+      {session?.admin && <Admin members={members} debts={debts} onChanged={onChanged} />}
     </>
   )
 }

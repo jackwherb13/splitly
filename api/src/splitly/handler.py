@@ -27,9 +27,9 @@ import boto3
 from botocore.exceptions import ClientError
 
 from splitly.delivery import summarise
-from splitly.ledger import Entry, Member, Pending, balances, drilldown
+from splitly.ledger import Entry, Member, Pending, balances, debts, drilldown
 from splitly.splits import all_to_one, even
-from splitly.store import AlreadyExists, DeadSubscription, NotPending, Store
+from splitly.store import AlreadyExists, DeadSubscription, DuplicatePending, NotPending, Store
 
 SESSION = "session"
 ADMIN = "admin"
@@ -166,10 +166,11 @@ def _write(house_id, *, description, kind, total, payer, shares):
 
 
 def _net(store, house_id):
-    """§V34 — the one balance every route uses: ledger plus pending payments."""
+    """§V34 — the one derivation every route uses: ledger plus pending
+    payments, as each member's net and as who owes who (§V37)."""
     entries = store.list_entries(house_id)
     pending = store.list_pending(house_id)
-    return entries, pending, balances(entries, pending)
+    return entries, pending, balances(entries, pending), debts(entries, pending)
 
 
 def _money(cents):
@@ -222,8 +223,14 @@ def create_write_off(event):
     fronted nothing reimburse the one who fronted everything.
     """
     body = _body(event)
+    house_id = _house(event)
+    _, _, _, pairs = _net(_get_store(), house_id)
+    for forgiver, amount in body["amounts"].items():
+        # §V38 — forgive only what the debtor actually owes this person.
+        if amount > pairs.get((body["forgiven"], forgiver), 0):
+            raise BadRequest("they don't owe that person that much")
     return _write(
-        _house(event),
+        house_id,
         description=body["description"],
         kind="write_off",
         total=body["total"],
@@ -318,12 +325,12 @@ def create_nudge(event):
     target = _body(event).get("member_id")
     store = _get_store()
 
-    _, _, net = _net(store, who.house_id)  # §V34
-    if net.get(who.member_id, 0) <= 0:
-        raise Forbidden("only someone the house owes can nudge")
-    owes = -net.get(target, 0)
+    _, _, _, pairs = _net(store, who.house_id)  # §V34
+    if not any(creditor == who.member_id for _, creditor in pairs):
+        raise Forbidden("nobody owes you anything")
+    owes = pairs.get((target, who.member_id), 0)  # §V24 — this pair only
     if owes <= 0:
-        raise BadRequest("they don't owe the house anything")
+        raise BadRequest("they don't owe you anything")
 
     subscriptions = [
         found["subscription"]
@@ -342,7 +349,7 @@ def create_nudge(event):
         push_id = str(uuid.uuid4())
         payload = {
             "title": f"{names.get(who.member_id, who.member_id)} nudged you",
-            "body": f"You owe the house ${owes // 100}.{owes % 100:02d}",
+            "body": f"You owe {names.get(who.member_id, who.member_id)} {_money(owes)}",
             "push_id": push_id,
             "house_id": who.house_id,
             "receipt_url": os.environ.get("SPLITLY_RECEIPT_URL"),
@@ -431,8 +438,21 @@ def list_balances(event):
     UI cannot show a balance next to entries that do not account for it,
     because it never computes either one.
     """
-    entries, pending, net = _net(_get_store(), _house(event))
+    entries, pending, net, pairs = _net(_get_store(), _house(event))
     waiting = [p for p in pending if p.status == "pending"]
+
+    def between(a, b):
+        """§V39 — the entries and pending payments that make up one pair."""
+        return {
+            "entry_ids": [
+                e.entry_id
+                for e in entries
+                if (e.payer == a and e.shares.get(b)) or (e.payer == b and e.shares.get(a))
+            ],
+            "pending_ids": [
+                p.pending_id for p in waiting if {p.from_member, p.to_member} == {a, b}
+            ],
+        }
     return _json(
         200,
         {
@@ -447,7 +467,12 @@ def list_balances(event):
                     ],
                 }
                 for member_id, amount in sorted(net.items())
-            ]
+            ],
+            # §T16.7 — who owes who, one row per pair (§V37).
+            "debts": [
+                {"from": debtor, "to": creditor, "amount": amount, **between(debtor, creditor)}
+                for (debtor, creditor), amount in sorted(pairs.items())
+            ],
         },
     )
 
@@ -503,18 +528,30 @@ def create_pending_payment(event):
     if not isinstance(amount, int) or isinstance(amount, bool) or amount <= 0:
         raise BadRequest("amount must be a positive number of cents")
 
+    claim_id = body.get("claim_id")
+    if claim_id is not None and not (isinstance(claim_id, str) and 0 < len(claim_id) <= 64):
+        raise BadRequest("claim_id must be a short string")
+
     store = _get_store()
-    _, _, net = _net(store, who.house_id)
-    owes = -net.get(who.member_id, 0)
+    if claim_id is not None:
+        # §V40 — a second tap returns the first claim instead of making another.
+        earlier = next(
+            (p for p in store.list_pending(who.house_id) if p.pending_id == claim_id), None
+        )
+        if earlier is not None:
+            if earlier.from_member != who.member_id:
+                raise Conflict("that claim id belongs to someone else")
+            return _json(200, _pending_dict(earlier))
+
+    _, _, _, pairs = _net(store, who.house_id)
+    owes = pairs.get((who.member_id, to), 0)  # §V38 — this pair, not the house
     if owes <= 0:
-        raise BadRequest("you don't owe the house anything")
-    if net.get(to, 0) <= 0:
-        raise BadRequest("the house doesn't owe them anything")
+        raise BadRequest("you don't owe them anything")
     if amount > owes:
-        raise BadRequest(f"you only owe {_money(owes)}")
+        raise BadRequest(f"you only owe them {_money(owes)}")
 
     pending = Pending(
-        pending_id=str(uuid.uuid4()),
+        pending_id=claim_id or str(uuid.uuid4()),
         house_id=who.house_id,
         created_at=datetime.now(UTC),
         from_member=who.member_id,
@@ -522,7 +559,14 @@ def create_pending_payment(event):
         amount=amount,
         status="pending",
     )
-    store.put_pending(pending)
+    try:
+        store.put_pending(pending)
+    except DuplicatePending:
+        # Two taps landed together: the other one wrote first (§V40).
+        earlier = next(p for p in store.list_pending(who.house_id) if p.pending_id == claim_id)
+        if earlier.from_member != who.member_id:
+            raise Conflict("that claim id belongs to someone else") from None
+        return _json(200, _pending_dict(earlier))
 
     names = {m.member_id: m.name for m in store.list_members(who.house_id)}
     name = names.get(who.member_id, who.member_id)

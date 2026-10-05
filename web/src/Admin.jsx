@@ -10,13 +10,14 @@ const money = (cents) => (cents / 100).toFixed(2)
 
 // Admin-only, and this component is not the guard — the router is (§V10).
 // Hiding the controls only avoids offering buttons the API would refuse.
-export default function Admin({ members, balances, onChanged }) {
+export default function Admin({ members, debts = [], onChanged }) {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState(null)
 
-  const owing = balances.filter((row) => row.net < 0)
-  const [forgiven, setForgiven] = useState(owing[0]?.member_id ?? '')
-  const [absorber, setAbsorber] = useState('')
+  // §T16.7, §V38 — forgive what one person owes another, never "the house".
+  const pairKey = (d) => `${d.from}|${d.to}`
+  const [pair, setPair] = useState(debts[0] ? pairKey(debts[0]) : '')
+  const chosen = debts.find((d) => pairKey(d) === pair)
   const [amount, setAmount] = useState('')
   const [newName, setNewName] = useState('')
   const [newEmail, setNewEmail] = useState('')
@@ -30,7 +31,6 @@ export default function Admin({ members, balances, onChanged }) {
   }, [])
 
   const nameOf = (id) => members.find((m) => m.member_id === id)?.name ?? id
-  const owedBy = (id) => Math.abs(balances.find((row) => row.member_id === id)?.net ?? 0)
 
   async function run(action) {
     setBusy(true)
@@ -46,15 +46,14 @@ export default function Admin({ members, balances, onChanged }) {
   }
 
   function writeOff() {
-    const total = amount.trim() === '' ? owedBy(forgiven) : toCents(amount)
+    const total = amount.trim() === '' ? chosen.amount : toCents(amount)
     return run(() =>
       createWriteOff({
-        description: `Write-off for ${nameOf(forgiven)}`,
-        forgiven,
+        description: `Write-off for ${nameOf(chosen.from)}`,
+        forgiven: chosen.from,
         total,
-        // §C50 — manual allocation. An even split would make someone who
-        // fronted nothing reimburse the person who fronted everything.
-        amounts: { [absorber]: total },
+        // §C50 — the person owed absorbs it: it is their money being forgiven.
+        amounts: { [chosen.to]: total },
       }),
     )
   }
@@ -126,19 +125,15 @@ export default function Admin({ members, balances, onChanged }) {
       </Fold>
 
       <Fold title="Write off a debt">
-        {owing.length === 0 ? (
+        {debts.length === 0 ? (
           <p className="muted">Nobody is in debt.</p>
         ) : (
           <>
             <label htmlFor="forgiven">Forgive</label>
-            <select
-              id="forgiven"
-              value={forgiven}
-              onChange={(e) => setForgiven(e.target.value)}
-            >
-              {owing.map((row) => (
-                <option key={row.member_id} value={row.member_id}>
-                  {nameOf(row.member_id)} — owes {money(Math.abs(row.net))}
+            <select id="forgiven" value={pair} onChange={(e) => setPair(e.target.value)}>
+              {debts.map((d) => (
+                <option key={pairKey(d)} value={pairKey(d)}>
+                  {nameOf(d.from)} owes {nameOf(d.to)} {money(d.amount)}
                 </option>
               ))}
             </select>
@@ -147,24 +142,12 @@ export default function Admin({ members, balances, onChanged }) {
             <input
               id="amount"
               inputMode="decimal"
-              placeholder={money(owedBy(forgiven))}
+              placeholder={chosen ? money(chosen.amount) : ''}
               value={amount}
               onChange={(e) => setAmount(e.target.value)}
             />
 
-            <label htmlFor="absorber">Who absorbs it?</label>
-            <select id="absorber" value={absorber} onChange={(e) => setAbsorber(e.target.value)}>
-              <option value="">Choose someone</option>
-              {members
-                .filter((member) => member.member_id !== forgiven)
-                .map((member) => (
-                  <option key={member.member_id} value={member.member_id}>
-                    {member.name}
-                  </option>
-                ))}
-            </select>
-
-            <button type="button" onClick={writeOff} disabled={busy || !absorber || !forgiven}>
+            <button type="button" onClick={writeOff} disabled={busy || !chosen}>
               {busy ? 'Saving...' : 'Write it off'}
             </button>
             <p className="muted small">

@@ -21,8 +21,8 @@ export default function App() {
   const [token, setToken] = useState(getToken())
   const [entries, setEntries] = useState([])
   const [members, setMembers] = useState([])
-  const [balances, setBalances] = useState([])
   const [pending, setPending] = useState([])
+  const [debts, setDebts] = useState([])
   const [session, setSession] = useState(null)
   const [reload, setReload] = useState(null)
   const tab = useTab()
@@ -39,7 +39,7 @@ export default function App() {
       ])
       setEntries(loadedEntries)
       setMembers(loadedMembers)
-      setBalances(loadedBalances)
+      setDebts(loadedBalances.debts)
       setPending(loadedPending)
       setSession(me)
       setError(null)
@@ -100,7 +100,7 @@ export default function App() {
 
         {tab === 'home' && (
           <Home
-            balances={balances}
+            debts={debts}
             entries={entries}
             members={members}
             pending={pending}
@@ -122,7 +122,7 @@ export default function App() {
           <Settings
             entries={entries}
             members={members}
-            balances={balances}
+            debts={debts}
             session={session}
             onChanged={refresh}
             onSignOut={() => {
