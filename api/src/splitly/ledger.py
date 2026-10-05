@@ -64,6 +64,9 @@ class Entry:
     total: int
     payer: str
     shares: Mapping[str, int]
+    # §V35 — set on the payment a verify writes, so the stream can tell the
+    # payer it was confirmed instead of telling the recipient what they just did.
+    pending_id: str | None = None
 
     def __post_init__(self) -> None:
         if self.total <= 0:
@@ -81,16 +84,43 @@ class Entry:
         object.__setattr__(self, "shares", MappingProxyType(dict(self.shares)))
 
 
-def balances(entries: Iterable[Entry]) -> dict[str, int]:
+@dataclass(frozen=True)
+class Pending:
+    """'I paid you' that the recipient has not answered yet (§T16.6, §V30).
+
+    Not an entry: the ledger only changes when the recipient verifies. Until
+    then it still counts as paid, through `balances` (§V34).
+    """
+
+    pending_id: str
+    house_id: str
+    created_at: datetime
+    from_member: str
+    to_member: str
+    amount: int
+    status: str  # "pending" | "verified" | "rejected"
+
+
+def balances(entries: Iterable[Entry], pending: Iterable[Pending] = ()) -> dict[str, int]:
     """Net position per member, derived from entries alone (§C6, §V3).
 
     Positive means the house owes them; negative means they owe the house.
+
+    §V34 — a pending payment counts as paid until it is rejected, and this is
+    the one place that says so. Every consumer (the balances route, nudges,
+    reminders) reads it from here, so the screen and a nudge cannot disagree.
+    It moves both people, like the payment it stands for, so §V1 still holds.
     """
     net: dict[str, int] = {}
     for entry in entries:
         net[entry.payer] = net.get(entry.payer, 0) + entry.total
         for member_id, share in entry.shares.items():
             net[member_id] = net.get(member_id, 0) - share
+    for claim in pending:
+        if claim.status != "pending":
+            continue
+        net[claim.from_member] = net.get(claim.from_member, 0) + claim.amount
+        net[claim.to_member] = net.get(claim.to_member, 0) - claim.amount
     return net
 
 

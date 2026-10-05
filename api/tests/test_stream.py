@@ -284,3 +284,15 @@ def test_v29_a_failed_send_is_still_recorded(table, monkeypatch, receipts, failu
 
     pushes = Store(table).list_pushes("h1", since=datetime(2000, 1, 1, tzinfo=UTC))
     assert "alice" in [p["member_id"] for p in pushes]
+
+
+def test_v35_a_verified_payment_tells_the_payer_not_the_recipient(table, sent):
+    """The recipient just tapped Verify; the payer is the one waiting to hear."""
+    payment = entry(kind="payment", payer="dan", shares={"jackson": 2050})
+    payment = Entry(**{**payment.__dict__, "shares": dict(payment.shares), "pending_id": "p1"})
+    stream.handle(inserted(table, payment), None)
+
+    ((endpoint, payload),) = sent.sent
+    assert endpoint == sub("dan")["endpoint"]
+    assert "Jackson" in payload["body"]
+    assert "$20.50" in payload["body"]

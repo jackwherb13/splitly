@@ -27,17 +27,18 @@ import boto3
 from botocore.exceptions import ClientError
 
 from splitly.delivery import summarise
-from splitly.ledger import Entry, Member, balances, drilldown
+from splitly.ledger import Entry, Member, Pending, balances, drilldown
 from splitly.splits import all_to_one, even
-from splitly.store import AlreadyExists, DeadSubscription, Store
+from splitly.store import AlreadyExists, DeadSubscription, NotPending, Store
 
 SESSION = "session"
 ADMIN = "admin"
 
 # Kinds an ordinary member may post. `write_off` is absent deliberately: §C50
 # makes it admin-only, so it is reachable through POST /write-offs and nowhere
-# else (§V18, B6).
-MEMBER_KINDS = frozenset({"expense", "payment"})
+# else (§V18, B6). `payment` likewise: it is written by a verify and nowhere
+# else, or "I paid" + Verify could be skipped by posting one (§V33).
+MEMBER_KINDS = frozenset({"expense"})
 
 _store = None
 _cognito = None
@@ -86,6 +87,10 @@ class Gone(Exception):
 
 class TooSoon(Exception):
     """This debtor was nudged within the hour (§V25)."""
+
+
+class NotFound(Exception):
+    """Nothing by that id in the caller's house (§V32)."""
 
 
 def _claims(event):
@@ -158,6 +163,17 @@ def _write(house_id, *, description, kind, total, payer, shares):
     )
     _get_store().put_entry(entry)
     return _json(201, _as_dict(entry))
+
+
+def _net(store, house_id):
+    """§V34 — the one balance every route uses: ledger plus pending payments."""
+    entries = store.list_entries(house_id)
+    pending = store.list_pending(house_id)
+    return entries, pending, balances(entries, pending)
+
+
+def _money(cents):
+    return f"${cents // 100}.{cents % 100:02d}"
 
 
 def me(event, _context):
@@ -302,7 +318,7 @@ def create_nudge(event):
     target = _body(event).get("member_id")
     store = _get_store()
 
-    net = balances(store.list_entries(who.house_id))
+    _, _, net = _net(store, who.house_id)  # §V34
     if net.get(who.member_id, 0) <= 0:
         raise Forbidden("only someone the house owes can nudge")
     owes = -net.get(target, 0)
@@ -415,8 +431,8 @@ def list_balances(event):
     UI cannot show a balance next to entries that do not account for it,
     because it never computes either one.
     """
-    entries = _get_store().list_entries(_house(event))
-    net = balances(entries)
+    entries, pending, net = _net(_get_store(), _house(event))
+    waiting = [p for p in pending if p.status == "pending"]
     return _json(
         200,
         {
@@ -425,11 +441,149 @@ def list_balances(event):
                     "member_id": member_id,
                     "net": amount,
                     "entry_ids": [e.entry_id for e in drilldown(entries, member_id)],
+                    # §V3 — a pending payment moves the figure, so it is listed too.
+                    "pending_ids": [
+                        p.pending_id for p in waiting if member_id in (p.from_member, p.to_member)
+                    ],
                 }
                 for member_id, amount in sorted(net.items())
             ]
         },
     )
+
+
+def _pending_dict(pending):
+    return {
+        "pending_id": pending.pending_id,
+        "from": pending.from_member,
+        "to": pending.to_member,
+        "amount": pending.amount,
+        "status": pending.status,
+        "created_at": pending.created_at.isoformat(),
+    }
+
+
+def _push_to(store, house_id, member_id, kind, title, body):
+    """Tell one member, on every device. None subscribed means nobody told (§V36)."""
+    from splitly import notifications
+
+    for found in store.list_push_subscriptions(house_id):
+        if found["member_id"] != member_id:
+            continue
+        push_id = str(uuid.uuid4())
+        payload = {
+            "title": title,
+            "body": body,
+            "push_id": push_id,
+            "house_id": house_id,
+            "receipt_url": os.environ.get("SPLITLY_RECEIPT_URL"),
+        }
+        store.record_push(house_id, push_id, member_id, kind, now=datetime.now(UTC))  # §V29
+        try:
+            notifications.send(found["subscription"], payload)
+        except notifications.SubscriptionGone:
+            notifications.report_failure("gone", member_id)
+            store.retire_push_subscription(  # §V7
+                house_id, member_id, found["subscription"]["endpoint"], now=datetime.now(UTC)
+            )
+        except Exception:
+            notifications.report_failure("error", member_id)
+
+
+def create_pending_payment(event):
+    """§T16.6 — "I paid you". Counts as paid at once (§V34), lands on the
+    ledger only when the recipient verifies (§V30).
+
+    The claimant is the session (§V32). Checked against the pending-adjusted
+    balances, so claims cannot add up to more than the debt.
+    """
+    who = _membership(event)
+    body = _body(event)
+    to, amount = body.get("to"), body.get("amount")
+    if not isinstance(amount, int) or isinstance(amount, bool) or amount <= 0:
+        raise BadRequest("amount must be a positive number of cents")
+
+    store = _get_store()
+    _, _, net = _net(store, who.house_id)
+    owes = -net.get(who.member_id, 0)
+    if owes <= 0:
+        raise BadRequest("you don't owe the house anything")
+    if net.get(to, 0) <= 0:
+        raise BadRequest("the house doesn't owe them anything")
+    if amount > owes:
+        raise BadRequest(f"you only owe {_money(owes)}")
+
+    pending = Pending(
+        pending_id=str(uuid.uuid4()),
+        house_id=who.house_id,
+        created_at=datetime.now(UTC),
+        from_member=who.member_id,
+        to_member=to,
+        amount=amount,
+        status="pending",
+    )
+    store.put_pending(pending)
+
+    names = {m.member_id: m.name for m in store.list_members(who.house_id)}
+    name = names.get(who.member_id, who.member_id)
+    _push_to(
+        store, who.house_id, to, "pending",
+        title=f"{name} says they paid", body=f"{name} says they paid you {_money(amount)}",
+    )
+    return _json(201, _pending_dict(pending))
+
+
+def list_pending_payments(event):
+    pending = _get_store().list_pending(_house(event))
+    return _json(200, {"pending": [_pending_dict(p) for p in pending if p.status == "pending"]})
+
+
+def resolve_pending_payment(event):
+    """§T16.6, §V31, §V32 — only the recipient answers, and only once."""
+    who = _membership(event)
+    pending_id = (event.get("pathParameters") or {}).get("pending_id")
+    action = _body(event).get("action")
+    if action not in ("verify", "reject"):
+        raise BadRequest(f"unknown action: {action!r}")
+
+    store = _get_store()
+    pending = next(
+        (p for p in store.list_pending(who.house_id) if p.pending_id == pending_id), None
+    )
+    if pending is None:
+        raise NotFound("no such pending payment")
+    if pending.to_member != who.member_id:
+        raise Forbidden("only the person paid can answer this")
+
+    names = {m.member_id: m.name for m in store.list_members(who.house_id)}
+    try:
+        if action == "verify":
+            payment = Entry(
+                entry_id=pending.pending_id,  # §V31 — a retry lands on the same key
+                house_id=pending.house_id,
+                created_at=datetime.now(UTC),
+                description=f"Payment to {names.get(pending.to_member, pending.to_member)}",
+                kind="payment",
+                total=pending.amount,
+                payer=pending.from_member,
+                shares={pending.to_member: pending.amount},
+                pending_id=pending.pending_id,
+            )
+            # The stream tells the payer (§V35); nothing to send from here.
+            store.resolve_pending(pending, "verified", payment=payment)
+            status = "verified"
+        else:
+            store.resolve_pending(pending, "rejected")
+            status = "rejected"
+            name = names.get(who.member_id, who.member_id)
+            _push_to(
+                store, who.house_id, pending.from_member, "rejected",
+                title=f"{name} didn't get it",
+                body=f"{name} didn't get your {_money(pending.amount)}",
+            )
+    except NotPending as exc:
+        raise Conflict("already answered") from exc
+    return _json(200, {"pending_id": pending.pending_id, "status": status})
 
 
 ROUTES = {
@@ -439,6 +593,9 @@ ROUTES = {
     "GET /balances": (list_balances, SESSION),
     "POST /subscriptions": (create_subscription, SESSION),
     "POST /nudges": (create_nudge, SESSION),
+    "GET /pending-payments": (list_pending_payments, SESSION),
+    "POST /pending-payments": (create_pending_payment, SESSION),
+    "PUT /pending-payments/{pending_id}": (resolve_pending_payment, SESSION),
     "PUT /members/{member_id}": (set_member_active, ADMIN),
     "POST /members": (create_member, ADMIN),
     "GET /deliveries": (list_deliveries, ADMIN),
@@ -473,6 +630,8 @@ def handle(event, context):
         return _json(403, {"error": "not a member of any house"})
     except Forbidden as exc:
         return _json(403, {"error": str(exc)})
+    except NotFound as exc:
+        return _json(404, {"error": str(exc)})
     except Conflict as exc:
         return _json(409, {"error": str(exc)})
     except Gone as exc:

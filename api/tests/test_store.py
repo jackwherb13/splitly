@@ -17,8 +17,8 @@ import boto3
 import pytest
 from moto import mock_aws
 
-from splitly.ledger import Entry, Member, balances
-from splitly.store import AlreadyExists, DeadSubscription, DuplicateEntry, Store
+from splitly.ledger import Entry, Member, Pending, balances
+from splitly.store import AlreadyExists, DeadSubscription, DuplicateEntry, NotPending, Store
 
 TABLE = "splitly-test"
 
@@ -117,6 +117,11 @@ def test_store_exposes_no_mutation_path(store):
         "put_push_subscription",
         "retire_push_subscription",
         "list_push_subscriptions",
+        # §T16.6 — resolve replaces a PENDING# record, never an ENTRY#; the one
+        # entry it writes is new (attribute_not_exists), so §V8 still holds.
+        "put_pending",
+        "list_pending",
+        "resolve_pending",
     }
 
 
@@ -431,3 +436,83 @@ def test_pushes_before_the_window_are_not_listed(store):
     assert [p["push_id"] for p in store.list_pushes("h1", since=NOON - timedelta(days=7))] == [
         "new"
     ]
+
+
+# --- pending payments (§T16.6) ---------------------------------------------
+
+def make_pending(**overrides):
+    fields = {
+        "pending_id": "p1",
+        "house_id": "h1",
+        "created_at": datetime(2026, 10, 4, tzinfo=UTC),
+        "from_member": "dan",
+        "to_member": "jackson",
+        "amount": 3000,
+        "status": "pending",
+    }
+    fields.update(overrides)
+    return Pending(**fields)
+
+
+def payment_for(pending):
+    return make_entry(
+        entry_id=pending.pending_id, kind="payment", payer=pending.from_member,
+        total=pending.amount, shares={pending.to_member: pending.amount},
+        pending_id=pending.pending_id,
+    )
+
+
+def test_an_entry_keeps_its_pending_id(store):
+    """§V35 — the stream needs it to tell a verified payment from a plain one."""
+    store.put_entry(make_entry(pending_id="p1"))
+    assert store.list_entries("h1")[0].pending_id == "p1"
+
+
+def test_an_entry_without_one_reads_back_as_none(store):
+    store.put_entry(make_entry())
+    assert store.list_entries("h1")[0].pending_id is None
+
+
+def test_v30_a_pending_payment_is_not_a_ledger_entry(store):
+    store.put_pending(make_pending())
+    assert store.list_entries("h1") == []
+    assert [p.pending_id for p in store.list_pending("h1")] == ["p1"]
+
+
+def test_v31_verify_writes_the_payment_and_closes_the_pending_together(store):
+    pending = make_pending()
+    store.put_pending(pending)
+    store.resolve_pending(pending, "verified", payment=payment_for(pending))
+
+    assert [e.entry_id for e in store.list_entries("h1")] == ["p1"]
+    assert store.list_pending("h1")[0].status == "verified"
+
+
+def test_v31_a_second_verify_writes_nothing(store):
+    pending = make_pending()
+    store.put_pending(pending)
+    store.resolve_pending(pending, "verified", payment=payment_for(pending))
+
+    with pytest.raises(NotPending):
+        store.resolve_pending(pending, "verified", payment=payment_for(pending))
+    assert len(store.list_entries("h1")) == 1
+
+
+def test_v31_reject_after_verify_is_refused(store):
+    pending = make_pending()
+    store.put_pending(pending)
+    store.resolve_pending(pending, "verified", payment=payment_for(pending))
+
+    with pytest.raises(NotPending):
+        store.resolve_pending(pending, "rejected")
+    assert store.list_pending("h1")[0].status == "verified"
+
+
+def test_v31_verify_after_reject_writes_no_payment(store):
+    pending = make_pending()
+    store.put_pending(pending)
+    store.resolve_pending(pending, "rejected")
+
+    with pytest.raises(NotPending):
+        store.resolve_pending(pending, "verified", payment=payment_for(pending))
+    assert store.list_entries("h1") == []

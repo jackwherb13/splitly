@@ -729,3 +729,237 @@ def test_v28_receipts_is_the_only_route_without_a_jwt():
     }
 
     assert {route for route, kind in auth.items() if kind != "JWT"} == {"POST /receipts"}
+
+
+# --- pending payments (§T16.6, §V30–§V36) ---------------------------------
+
+
+@pytest.fixture
+def owing(store, monkeypatch):
+    """Jackson (SUB) fronted $20 of groceries for Dan. Both phones subscribed."""
+    from splitly import notifications
+
+    store.put_member("h1", Member(member_id="jackson", name="Jackson"))
+    store.put_member("h1", Member(member_id="dan", name="Dan"))
+    store.put_user_house(DAN_SUB, "h1", member_id="dan")
+    handle(request("POST /entries", body={
+        "description": "groceries", "kind": "expense", "total": 2000, "payer": "jackson",
+        "mode": "all_to_one", "member": "dan",
+    }), None)
+    for member_id in ("jackson", "dan"):
+        endpoint = f"https://push.example.com/{member_id}"
+        store.put_push_subscription("h1", member_id, {"endpoint": endpoint})
+
+    sent = []
+    monkeypatch.setattr(
+        notifications, "send", lambda sub, payload: sent.append((sub["endpoint"], payload))
+    )
+    return sent
+
+
+def claim(amount=2000, to="jackson", sub=DAN_SUB, **extra):
+    return handle(
+        request("POST /pending-payments", body={"to": to, "amount": amount, **extra}, sub=sub), None
+    )
+
+
+def resolve(pending_id, action, sub=SUB):
+    return handle(
+        request(
+            "PUT /pending-payments/{pending_id}",
+            body={"action": action},
+            sub=sub,
+            path={"pending_id": pending_id},
+        ),
+        None,
+    )
+
+
+def body_of(response):
+    return json.loads(response["body"])
+
+
+def net():
+    rows = body_of(handle(request("GET /balances"), None))["balances"]
+    return {row["member_id"]: row["net"] for row in rows}
+
+
+def entries():
+    return body_of(handle(request("GET /entries"), None))["entries"]
+
+
+def pending():
+    return body_of(handle(request("GET /pending-payments"), None))["pending"]
+
+
+def test_saying_you_paid_is_recorded_as_pending(store, owing):
+    response = claim()
+
+    assert response["statusCode"] == 201
+    created = body_of(response)
+    assert (created["from"], created["to"], created["amount"], created["status"]) == (
+        "dan", "jackson", 2000, "pending"
+    )
+
+
+def test_v30_a_pending_payment_is_not_on_the_ledger(store, owing):
+    claim()
+    assert [e["kind"] for e in entries()] == ["expense"]
+
+
+def test_v34_but_it_counts_as_paid_in_the_balances(store, owing):
+    claim()
+    assert net() == {"jackson": 0, "dan": 0}
+
+
+def test_v3_the_drilldown_names_the_pending_payment_it_counted(store, owing):
+    pending_id = body_of(claim())["pending_id"]
+    rows = body_of(handle(request("GET /balances"), None))["balances"]
+    assert {row["member_id"]: row["pending_ids"] for row in rows} == {
+        "jackson": [pending_id], "dan": [pending_id]
+    }
+
+
+def test_v32_the_claimant_is_the_session_not_the_body(store, owing):
+    created = body_of(claim(**{"from": "jackson"}))
+    assert created["from"] == "dan"
+
+
+def test_the_recipient_is_told(store, owing):
+    claim()
+    ((endpoint, payload),) = owing
+    assert endpoint == "https://push.example.com/jackson"
+    assert payload["body"] == "Dan says they paid you $20.00"
+
+
+def test_v29_the_claim_push_is_counted(store, owing):
+    claim()
+    pushes = store.list_pushes("h1", since=datetime(2000, 1, 1, tzinfo=UTC))
+    assert [p["kind"] for p in pushes] == ["pending"]
+
+
+def test_v36_a_recipient_without_notifications_still_gets_the_claim(store, owing):
+    store.retire_push_subscription(
+        "h1", "jackson", "https://push.example.com/jackson", now=datetime.now(UTC)
+    )
+    assert claim()["statusCode"] == 201
+    assert owing == []
+
+
+@pytest.mark.parametrize(
+    ("amount", "to", "sub"),
+    [
+        (2001, "jackson", DAN_SUB),  # more than Dan owes
+        (0, "jackson", DAN_SUB),  # nothing
+        (-500, "jackson", DAN_SUB),
+        (1000, "dan", SUB),  # Jackson owes nobody
+        (1000, "dan", DAN_SUB),  # to yourself, who is owed nothing
+    ],
+)
+def test_a_claim_must_fit_the_balances(store, owing, amount, to, sub):
+    assert claim(amount, to=to, sub=sub)["statusCode"] == 400
+    assert owing == []
+
+
+def test_any_number_of_claims_while_they_fit(store, owing):
+    assert claim(1000)["statusCode"] == 201
+    assert claim(1000)["statusCode"] == 201
+    assert len(pending()) == 2
+
+
+def test_a_claim_is_checked_against_the_pending_adjusted_debt(store, owing):
+    claim(1500)
+    assert claim(1000)["statusCode"] == 400, "only $5 is left to claim"
+
+
+def test_both_sides_can_list_what_is_pending(store, owing):
+    pending_id = body_of(claim())["pending_id"]
+    as_dan = body_of(handle(request("GET /pending-payments", sub=DAN_SUB), None))["pending"]
+    assert [p["pending_id"] for p in pending()] == [pending_id]
+    assert [p["pending_id"] for p in as_dan] == [pending_id]
+
+
+def test_verify_puts_the_payment_on_the_ledger(store, owing):
+    pending_id = body_of(claim())["pending_id"]
+
+    assert resolve(pending_id, "verify")["statusCode"] == 200
+    (payment,) = [e for e in entries() if e["kind"] == "payment"]
+    assert (payment["entry_id"], payment["payer"], payment["shares"]) == (
+        pending_id, "dan", {"jackson": 2000}
+    )
+    assert pending() == []
+
+
+def test_v34_verifying_does_not_move_the_balance(store, owing):
+    pending_id = body_of(claim())["pending_id"]
+    before = net()
+    resolve(pending_id, "verify")
+    assert net() == before
+
+
+def test_v31_a_second_verify_is_refused_and_writes_nothing(store, owing):
+    pending_id = body_of(claim())["pending_id"]
+    resolve(pending_id, "verify")
+
+    assert resolve(pending_id, "verify")["statusCode"] == 409
+    assert [e["kind"] for e in entries()].count("payment") == 1
+
+
+def test_v31_reject_after_verify_is_refused(store, owing):
+    pending_id = body_of(claim())["pending_id"]
+    resolve(pending_id, "verify")
+    assert resolve(pending_id, "reject")["statusCode"] == 409
+
+
+def test_reject_puts_the_debt_back_and_tells_the_claimant(store, owing):
+    pending_id = body_of(claim())["pending_id"]
+    owing.clear()
+
+    assert resolve(pending_id, "reject")["statusCode"] == 200
+    assert net() == {"jackson": 2000, "dan": -2000}
+    assert pending() == []
+    ((endpoint, payload),) = owing
+    assert endpoint == "https://push.example.com/dan"
+    assert payload["body"] == "Jackson didn't get your $20.00"
+
+
+def test_v32_the_claimant_cannot_verify_their_own_claim(store, owing):
+    pending_id = body_of(claim())["pending_id"]
+    assert resolve(pending_id, "verify", sub=DAN_SUB)["statusCode"] == 403
+    assert resolve(pending_id, "reject", sub=DAN_SUB)["statusCode"] == 403
+
+
+def test_v32_an_unknown_pending_payment_is_not_found(store, owing):
+    assert resolve("nope", "verify")["statusCode"] == 404
+
+
+def test_an_unknown_action_is_a_bad_request(store, owing):
+    pending_id = body_of(claim())["pending_id"]
+    assert resolve(pending_id, "approve")["statusCode"] == 400
+
+
+def test_v33_a_payment_cannot_be_posted_directly(store, owing):
+    response = handle(request("POST /entries", body={
+        "description": "paid", "kind": "payment", "total": 2000, "payer": "dan",
+        "mode": "all_to_one", "member": "jackson",
+    }, sub=DAN_SUB), None)
+    assert response["statusCode"] == 400
+
+
+def test_v34_nobody_is_nudged_for_money_they_say_they_paid(store, owing):
+    claim()
+    owing.clear()
+
+    # The claim settles both sides, so Jackson is no longer owed and is
+    # refused before Dan's balance is even read.
+    assert nudge("dan")["statusCode"] == 403
+    assert owing == []
+
+
+def test_v34_a_partial_claim_leaves_the_rest_nudgeable(store, owing):
+    claim(1500)
+    owing.clear()
+
+    assert nudge("dan")["statusCode"] == 201
+    ((_, payload),) = owing
+    assert "$5.00" in payload["body"]

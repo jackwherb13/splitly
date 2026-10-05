@@ -14,7 +14,7 @@ import pytest
 from hypothesis import assume, given
 from hypothesis import strategies as st
 
-from splitly.ledger import Entry, balances, drilldown
+from splitly.ledger import Entry, Pending, balances, drilldown
 from splitly.splits import even
 
 # A fixed roster (§C20 — four people) so members collide across entries and
@@ -75,6 +75,28 @@ def test_v1_any_ledger_sums_to_zero(ledger):
 def test_v1_survives_appending_any_entry(ledger, extra):
     """Append-only means §V1 must hold after every write, not only at rest."""
     assert sum(balances(ledger + [extra]).values()) == 0
+
+
+@st.composite
+def pendings(draw):
+    """§T16.6 — any claim between two different people, in any state."""
+    pair = st.lists(st.sampled_from(ROSTER), min_size=2, max_size=2, unique=True)
+    from_member, to_member = draw(pair)
+    return Pending(
+        pending_id=f"p{draw(st.integers(0, 10**6))}",
+        house_id="h1",
+        created_at=WHEN,
+        from_member=from_member,
+        to_member=to_member,
+        amount=draw(CENTS),
+        status=draw(st.sampled_from(["pending", "verified", "rejected"])),
+    )
+
+
+@given(ledger=ledgers, waiting=st.lists(pendings(), max_size=6))
+def test_v34_counting_pending_payments_keeps_v1(ledger, waiting):
+    """A pending payment moves both people, so the house still sums to zero."""
+    assert sum(balances(ledger, waiting).values()) == 0
 
 
 def test_v1_holds_for_the_empty_ledger():

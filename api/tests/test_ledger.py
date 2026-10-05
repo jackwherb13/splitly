@@ -10,7 +10,7 @@ from datetime import UTC, datetime
 
 import pytest
 
-from splitly.ledger import Entry, Member, balances, drilldown
+from splitly.ledger import Entry, Member, Pending, balances, drilldown
 
 
 def make_entry(**overrides):
@@ -146,6 +146,7 @@ def test_entry_stores_amounts_not_the_split_style():
         "total",
         "payer",
         "shares",
+        "pending_id",  # §V35 — which verify wrote it, not how it was split
     }
 
 
@@ -189,3 +190,46 @@ def test_drilldown_excludes_entries_that_do_not_touch_the_member():
 def test_drilldown_preserves_ledger_order():
     entries = [make_entry(entry_id="e1"), make_entry(entry_id="e2")]
     assert [e.entry_id for e in drilldown(entries, "dan")] == ["e1", "e2"]
+
+
+# --- pending payments (§T16.6, §V34) ---------------------------------------
+
+def make_pending(**overrides):
+    """Dan says he paid Jackson $30, and Jackson has not answered yet."""
+    fields = {
+        "pending_id": "p1",
+        "house_id": "h1",
+        "created_at": datetime(2026, 10, 4, tzinfo=UTC),
+        "from_member": "dan",
+        "to_member": "jackson",
+        "amount": 3000,
+        "status": "pending",
+    }
+    fields.update(overrides)
+    return Pending(**fields)
+
+
+def test_v34_a_pending_payment_counts_as_paid():
+    assert balances([make_entry()], [make_pending()])["dan"] == 0
+
+
+def test_v34_it_moves_the_recipient_too_so_the_house_still_sums_to_zero():
+    net = balances([make_entry()], [make_pending()])
+    assert net["jackson"] == 6000 - 3000, "owed $60, $30 of it now counted as paid"
+    assert sum(net.values()) == 0
+
+
+@pytest.mark.parametrize("status", ["verified", "rejected"])
+def test_v34_only_a_pending_one_counts(status):
+    """Verified lives in the ledger now; rejected never happened."""
+    assert balances([make_entry()], [make_pending(status=status)])["dan"] == -3000
+
+
+def test_v34_verifying_leaves_the_balance_where_it_was():
+    before = balances([make_entry()], [make_pending()])
+    payment = make_entry(
+        entry_id="p1", kind="payment", payer="dan", total=3000,
+        shares={"jackson": 3000}, pending_id="p1",
+    )
+    after = balances([make_entry(), payment], [make_pending(status="verified")])
+    assert after == before

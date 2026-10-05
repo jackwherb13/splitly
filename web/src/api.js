@@ -58,3 +58,9 @@ export const createWriteOff = (body) =>
   call('/write-offs', { method: 'POST', body: JSON.stringify(body) })
 export const createEntry = (body) =>
   call('/entries', { method: 'POST', body: JSON.stringify(body) })
+// §T16.6 — "I paid", and the answer from the person paid.
+export const listPending = () => call('/pending-payments').then((data) => data.pending)
+export const claimPayment = (to, amount) =>
+  call('/pending-payments', { method: 'POST', body: JSON.stringify({ to, amount }) })
+export const answerPayment = (pendingId, action) =>
+  call(`/pending-payments/${pendingId}`, { method: 'PUT', body: JSON.stringify({ action }) })

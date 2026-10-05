@@ -175,6 +175,30 @@ resource "aws_apigatewayv2_route" "member_set_active" {
   authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
 }
 
+resource "aws_apigatewayv2_route" "get_pending_payments" {
+  api_id             = aws_apigatewayv2_api.main.id
+  route_key          = "GET /pending-payments"
+  target             = "integrations/${aws_apigatewayv2_integration.api.id}"
+  authorization_type = "JWT"
+  authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
+}
+
+resource "aws_apigatewayv2_route" "set_pending_payments" {
+  api_id             = aws_apigatewayv2_api.main.id
+  route_key          = "POST /pending-payments"
+  target             = "integrations/${aws_apigatewayv2_integration.api.id}"
+  authorization_type = "JWT"
+  authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
+}
+
+resource "aws_apigatewayv2_route" "put_pending_id" {
+  api_id             = aws_apigatewayv2_api.main.id
+  route_key          = "PUT /pending-payments/{pending_id}"
+  target             = "integrations/${aws_apigatewayv2_integration.api.id}"
+  authorization_type = "JWT"
+  authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
+}
+
 resource "aws_apigatewayv2_route" "member_create" {
   api_id             = aws_apigatewayv2_api.main.id
   route_key          = "POST /members"

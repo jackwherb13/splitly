@@ -62,14 +62,23 @@ def _notify(image):
     names = {m.member_id: m.name for m in store.list_members(house_id)}
     payer_name = names.get(payer, payer)
 
+    if image.get("pending_id"):
+        # §V35 — written by a verify: the recipient just tapped it, so the
+        # payer is the one who needs to hear.
+        (recipient,) = owed
+        recipient_name = names.get(recipient, recipient)
+        told = {payer: f"{recipient_name} confirmed your {_dollars(owed[recipient])}"}
+    else:
+        told = {member: _body(image["kind"], payer_name, share) for member, share in owed.items()}
+
     for found in store.list_push_subscriptions(house_id):
         member = found["member_id"]
-        if member not in owed:
+        if member not in told:
             continue
         push_id = str(uuid.uuid4())
         payload = {
             "title": image["description"],
-            "body": _body(image["kind"], payer_name, owed[member]),
+            "body": told[member],
             # §T14 — what the service worker needs to send its receipt.
             "push_id": push_id,
             "house_id": house_id,

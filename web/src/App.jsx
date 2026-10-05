@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 
 import './app.css'
-import { createEntry, listBalances, listEntries, listMembers, whoami } from './api'
+import { createEntry, listBalances, listEntries, listMembers, listPending, whoami } from './api'
 import { getToken, signOut } from './auth'
 import EntryForm from './EntryForm'
 import { splittable } from './entryBody'
@@ -22,6 +22,7 @@ export default function App() {
   const [entries, setEntries] = useState([])
   const [members, setMembers] = useState([])
   const [balances, setBalances] = useState([])
+  const [pending, setPending] = useState([])
   const [session, setSession] = useState(null)
   const [reload, setReload] = useState(null)
   const tab = useTab()
@@ -29,15 +30,17 @@ export default function App() {
 
   const refresh = useCallback(async () => {
     try {
-      const [loadedEntries, loadedMembers, loadedBalances, me] = await Promise.all([
+      const [loadedEntries, loadedMembers, loadedBalances, me, loadedPending] = await Promise.all([
         listEntries(),
         listMembers(),
         listBalances(),
         whoami(),
+        listPending(),
       ])
       setEntries(loadedEntries)
       setMembers(loadedMembers)
       setBalances(loadedBalances)
+      setPending(loadedPending)
       setSession(me)
       setError(null)
     } catch (err) {
@@ -96,7 +99,14 @@ export default function App() {
         {error && <p className="error">{error}</p>}
 
         {tab === 'home' && (
-          <Home balances={balances} entries={entries} members={members} me={session?.member_id} />
+          <Home
+            balances={balances}
+            entries={entries}
+            members={members}
+            pending={pending}
+            me={session?.member_id}
+            onChanged={refresh}
+          />
         )}
 
         {tab === 'add' &&

@@ -4,6 +4,7 @@ Key schema (what T2.5 builds):
 
     pk = HOUSE#<house_id>      sk = ENTRY#<entry_id>
     pk = HOUSE#<house_id>      sk = MEMBER#<member_id>
+    pk = HOUSE#<house_id>      sk = PENDING#<pending_id>    (§T16.6 — not ledger rows)
 
 One partition per house, so listing a house's ledger is a single query and
 entries and members are separated only by their sort-key prefix.
@@ -28,7 +29,7 @@ from decimal import Decimal
 from boto3.dynamodb.conditions import Key
 from botocore.exceptions import ClientError
 
-from splitly.ledger import Entry, Member, Membership
+from splitly.ledger import Entry, Member, Membership, Pending
 
 
 class DuplicateEntry(Exception):
@@ -43,6 +44,10 @@ class AlreadyExists(Exception):
     """The member id is taken, or the login already belongs to a house (§V20)."""
 
 
+class NotPending(Exception):
+    """Already verified or rejected — the other answer got there first (§V31)."""
+
+
 def _as_int(value: int | Decimal) -> int:
     """DynamoDB hands numbers back as Decimal; cents are always int here."""
     return int(value)
@@ -55,6 +60,18 @@ class Store:
     # --- entries -----------------------------------------------------
 
     def put_entry(self, entry: Entry) -> None:
+        try:
+            self._table.put_item(
+                Item=self._entry_item(entry),
+                ConditionExpression="attribute_not_exists(pk) AND attribute_not_exists(sk)",
+            )
+        except ClientError as exc:
+            if exc.response["Error"]["Code"] == "ConditionalCheckFailedException":
+                raise DuplicateEntry(entry.entry_id) from exc
+            raise
+
+    @staticmethod
+    def _entry_item(entry: Entry) -> dict:
         item = {
             "pk": f"HOUSE#{entry.house_id}",
             "sk": f"ENTRY#{entry.entry_id}",
@@ -67,15 +84,9 @@ class Store:
             "payer": entry.payer,
             "shares": dict(entry.shares),
         }
-        try:
-            self._table.put_item(
-                Item=item,
-                ConditionExpression="attribute_not_exists(pk) AND attribute_not_exists(sk)",
-            )
-        except ClientError as exc:
-            if exc.response["Error"]["Code"] == "ConditionalCheckFailedException":
-                raise DuplicateEntry(entry.entry_id) from exc
-            raise
+        if entry.pending_id is not None:
+            item["pending_id"] = entry.pending_id
+        return item
 
     def list_entries(self, house_id: str) -> list[Entry]:
         items = self._query(house_id, "ENTRY#")
@@ -260,6 +271,57 @@ class Store:
             raise
         return True
 
+    # --- pending payments (§T16.6) ------------------------------------
+
+    def put_pending(self, pending: Pending) -> None:
+        self._table.put_item(
+            Item=self._pending_item(pending),
+            ConditionExpression="attribute_not_exists(pk)",
+        )
+
+    def list_pending(self, house_id: str) -> list[Pending]:
+        """Every status. `balances` counts only the pending ones (§V34)."""
+        return [self._to_pending(item) for item in self._query(house_id, "PENDING#")]
+
+    def resolve_pending(self, pending: Pending, status: str, payment: Entry | None = None) -> None:
+        """§V31 — answer a pending payment once.
+
+        The status is replaced, not updated, so the api role needs PutItem
+        alone. The replace is conditional on it still being pending, and a
+        verify's payment goes in the same transaction, keyed by the pending
+        id: a double tap, a retry or a verify racing a reject all end with
+        exactly one outcome.
+        """
+        closed = Pending(**{**pending.__dict__, "status": status})
+        items = [
+            {
+                "Put": {
+                    "TableName": self._table.name,
+                    "Item": self._pending_item(closed),
+                    "ConditionExpression": "#status = :pending",
+                    "ExpressionAttributeNames": {"#status": "status"},
+                    "ExpressionAttributeValues": {":pending": "pending"},
+                }
+            }
+        ]
+        if payment is not None:
+            items.append(
+                {
+                    "Put": {
+                        "TableName": self._table.name,
+                        "Item": self._entry_item(payment),
+                        "ConditionExpression": "attribute_not_exists(pk)",
+                    }
+                }
+            )
+        try:
+            self._table.meta.client.transact_write_items(TransactItems=items)
+        except ClientError as exc:
+            reasons = [r.get("Code") for r in exc.response.get("CancellationReasons", [])]
+            if "ConditionalCheckFailed" in reasons:
+                raise NotPending(pending.pending_id) from exc
+            raise
+
     # --- delivery receipts (§T14) -------------------------------------
 
     def record_push(
@@ -338,6 +400,33 @@ class Store:
             total=_as_int(item["total"]),
             payer=item["payer"],
             shares={member: _as_int(share) for member, share in item["shares"].items()},
+            pending_id=item.get("pending_id"),
+        )
+
+    @staticmethod
+    def _pending_item(pending: Pending) -> dict:
+        return {
+            "pk": f"HOUSE#{pending.house_id}",
+            "sk": f"PENDING#{pending.pending_id}",
+            "pending_id": pending.pending_id,
+            "house_id": pending.house_id,
+            "created_at": pending.created_at.isoformat(),
+            "from_member": pending.from_member,
+            "to_member": pending.to_member,
+            "amount": pending.amount,
+            "status": pending.status,
+        }
+
+    @staticmethod
+    def _to_pending(item: dict) -> Pending:
+        return Pending(
+            pending_id=item["pending_id"],
+            house_id=item["house_id"],
+            created_at=datetime.fromisoformat(item["created_at"]),
+            from_member=item["from_member"],
+            to_member=item["to_member"],
+            amount=_as_int(item["amount"]),
+            status=item["status"],
         )
 
     @staticmethod
